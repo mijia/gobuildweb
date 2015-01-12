@@ -24,10 +24,18 @@ type PackageConfig struct {
 	OmitTests    []string `toml:"omit_tests"`
 }
 
+func usage() {
+	fmt.Println("Build a Golang web application")
+	fmt.Println("Usage:")
+	fmt.Println("  update    Update all your dependencies...")
+	fmt.Println("  build     Build your web application")
+	fmt.Println("  run       Will watch your file changes and run the application")
+	os.Exit(1)
+}
+
 func main() {
 	cmds := map[string]Command{
 		"run":    commandRun,
-		"test":   commandTest,
 		"dist":   commandDist,
 		"update": commandUpdate,
 	}
@@ -50,22 +58,16 @@ func main() {
 		if _, err := toml.DecodeFile("project.toml", &rootConfig); err != nil {
 			ERROR.Fatalf("Cannot decode the project.toml into TOML format, %v", err)
 		}
-		SUCC.Printf("Loaded project data from project.toml...")
+		INFO.SetPrefix(fmt.Sprintf("[%s][INFO] ", rootConfig.Package.Name))
+		SUCC.SetPrefix(fmt.Sprintf("[%s][SUCC] ", rootConfig.Package.Name))
+		WARN.SetPrefix(fmt.Sprintf("[%s][WARN] ", rootConfig.Package.Name))
+		ERROR.SetPrefix(fmt.Sprintf("[%s][ERROR] ", rootConfig.Package.Name))
 
+		SUCC.Printf("Loaded project.toml...")
 		if err := cmd(args[1:]); err != nil {
 			ERROR.Fatalf("Executing command [%v] error, %v", args[0], err)
 		}
 	}
-}
-
-func usage() {
-	fmt.Println("Go build web provides tool to simple way to build your web application.")
-	fmt.Println("Usage:")
-	fmt.Println("  update\t\tUpdate all your dependencies...")
-	fmt.Println("  test\t\tTest your modules")
-	fmt.Println("  build\t\tBuild your web application")
-	fmt.Println("  run\t\tWill watch your file changes and run the application")
-	os.Exit(1)
 }
 
 type ColoredLogger struct {
@@ -86,11 +88,10 @@ var (
 )
 
 func init() {
-	INFO = log.New(os.Stdout, "[INFO] ", log.LstdFlags|log.Lshortfile)
-	SUCC = log.New(&ColoredLogger{gocolorize.NewColor("green"), os.Stdout}, "[SUCC] ", log.LstdFlags|log.Lshortfile)
-	WARN = log.New(&ColoredLogger{gocolorize.NewColor("yellow"), os.Stdout}, "[WARN] ", log.LstdFlags|log.Lshortfile)
-	ERROR = log.New(&ColoredLogger{gocolorize.NewColor("red"), os.Stdout}, "[ERROR] ", log.LstdFlags|log.Lshortfile)
+	INFO = log.New(os.Stdout, "[INFO] ", log.LstdFlags)
+	SUCC = log.New(&ColoredLogger{gocolorize.NewColor("green"), os.Stdout}, "[SUCC] ", log.LstdFlags)
+	WARN = log.New(&ColoredLogger{gocolorize.NewColor("yellow"), os.Stdout}, "[WARN] ", log.LstdFlags)
+	ERROR = log.New(&ColoredLogger{gocolorize.NewColor("red"), os.Stdout}, "[ERROR] ", log.LstdFlags)
 
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	runtime.GOMAXPROCS(runtime.NumCPU())
 }

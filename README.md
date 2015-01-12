@@ -1,2 +1,1 @@
-Go Build Web
----------------------
+Build a Golang web application

@@ -8,38 +8,29 @@ import (
 
 type Command func(args []string) error
 
-func commandTest(args []string) error {
-	return nil
-}
-
 func commandDist(args []string) error {
 	return nil
 }
 
 func commandUpdate(args []string) error {
+	fmt.Println()
 	INFO.Printf("Start to loading dependencies...")
-	cmds := make([]string, 0, 4)
+	cmds := make([]string, 0, 2+len(args))
 	cmds = append(cmds, "get")
-	for _, arg := range args {
-		cmds = append(cmds, arg)
-	}
+	cmds = append(cmds, args...)
 	cmds = append(cmds, "")
 	for _, dep := range rootConfig.Package.Dependencies {
 		cmds[len(cmds)-1] = dep
+		INFO.Printf("Loading dependency %v", dep)
 		getCmd := exec.Command("go", cmds...)
-		var (
-			outputPipe bytes.Buffer
-			errorPipe  bytes.Buffer
-		)
-		getCmd.Stdout = &outputPipe
+		var errorPipe bytes.Buffer
 		getCmd.Stderr = &errorPipe
 		if err := getCmd.Run(); err != nil {
 			ERROR.Printf("Error when run go get: go %v\n%v", cmds, errorPipe.String())
 			return err
-		} else {
-			SUCC.Printf("Loaded dependency: %v %v", dep, outputPipe.String())
 		}
 	}
+	SUCC.Printf("Loaded dependencies: %v", rootConfig.Package.Dependencies)
 	return nil
 }
 
