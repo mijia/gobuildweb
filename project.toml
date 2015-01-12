@@ -1,0 +1,10 @@
+# This is the TOML config file for project: go_build_web
+
+[package]
+name = "go_build_web"
+version = "0.1"
+authors = ["Jia Mi <winters.mi@gmail.com>"]
+deps = [
+    "github.com/BurntSushi/toml",
+    "github.com/agtorre/gocolorize"
+]
