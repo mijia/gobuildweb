@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"runtime"
 
 	"github.com/BurntSushi/toml"
 	"github.com/agtorre/gocolorize"
@@ -25,10 +26,10 @@ type PackageConfig struct {
 
 func main() {
 	cmds := map[string]Command{
-		"run":    dummyCommand,
-		"test":   dummyCommand,
-		"dist":   dummyCommand,
-		"update": dummyCommand,
+		"run":    commandRun,
+		"test":   commandTest,
+		"dist":   commandDist,
+		"update": commandUpdate,
 	}
 	flag.Parse()
 	args := flag.Args()
@@ -49,7 +50,7 @@ func main() {
 		if _, err := toml.DecodeFile("project.toml", &rootConfig); err != nil {
 			ERROR.Fatalf("Cannot decode the project.toml into TOML format, %v", err)
 		}
-		INFO.Printf("Loaded project data from project.toml...")
+		SUCC.Printf("Loaded project data from project.toml...")
 
 		if err := cmd(args[1:]); err != nil {
 			ERROR.Fatalf("Executing command [%v] error, %v", args[0], err)
@@ -78,17 +79,18 @@ func (cl *ColoredLogger) Write(p []byte) (n int, err error) {
 
 var rootConfig ProjectConfig
 var (
-	TRACE *log.Logger
 	INFO  *log.Logger
+	SUCC  *log.Logger
 	WARN  *log.Logger
 	ERROR *log.Logger
 )
 
 func init() {
-	TRACE = log.New(&ColoredLogger{gocolorize.NewColor("magenta"), os.Stdout}, "[TRACE] ", log.LstdFlags|log.Lshortfile)
-	INFO = log.New(&ColoredLogger{gocolorize.NewColor("green"), os.Stdout}, "[INFO] ", log.LstdFlags|log.Lshortfile)
+	INFO = log.New(os.Stdout, "[INFO] ", log.LstdFlags|log.Lshortfile)
+	SUCC = log.New(&ColoredLogger{gocolorize.NewColor("green"), os.Stdout}, "[SUCC] ", log.LstdFlags|log.Lshortfile)
 	WARN = log.New(&ColoredLogger{gocolorize.NewColor("yellow"), os.Stdout}, "[WARN] ", log.LstdFlags|log.Lshortfile)
 	ERROR = log.New(&ColoredLogger{gocolorize.NewColor("red"), os.Stdout}, "[ERROR] ", log.LstdFlags|log.Lshortfile)
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	runtime.GOMAXPROCS(runtime.NumCPU())
 }
