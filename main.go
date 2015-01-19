@@ -25,7 +25,6 @@ type PackageConfig struct {
 }
 
 func usage() {
-	fmt.Println("Build a Golang web application")
 	fmt.Println("Usage:")
 	fmt.Println("  update    Update all your dependencies...")
 	fmt.Println("  build     Build your web application")
@@ -34,6 +33,8 @@ func usage() {
 }
 
 func main() {
+	fmt.Println(gocolorize.NewColor("magenta").Paint("gobuildweb > Build a Golang web application.\n"))
+
 	cmds := map[string]Command{
 		"run":    commandRun,
 		"dist":   commandDist,
@@ -58,12 +59,8 @@ func main() {
 		if _, err := toml.DecodeFile("project.toml", &rootConfig); err != nil {
 			ERROR.Fatalf("Cannot decode the project.toml into TOML format, %v", err)
 		}
-		INFO.SetPrefix(fmt.Sprintf("[%s][INFO] ", rootConfig.Package.Name))
-		SUCC.SetPrefix(fmt.Sprintf("[%s][SUCC] ", rootConfig.Package.Name))
-		WARN.SetPrefix(fmt.Sprintf("[%s][WARN] ", rootConfig.Package.Name))
-		ERROR.SetPrefix(fmt.Sprintf("[%s][ERROR] ", rootConfig.Package.Name))
+		SUCC.Printf("Loaded project.toml... %s", rootConfig.Package.Name)
 
-		SUCC.Printf("Loaded project.toml...")
 		if err := cmd(args[1:]); err != nil {
 			ERROR.Fatalf("Executing command [%v] error, %v", args[0], err)
 		}

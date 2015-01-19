@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os/exec"
+	"strings"
 )
 
 type Command func(args []string) error
@@ -21,7 +22,7 @@ func commandUpdate(args []string) error {
 	cmds = append(cmds, "")
 	for _, dep := range rootConfig.Package.Dependencies {
 		cmds[len(cmds)-1] = dep
-		INFO.Printf("Loading dependency %v", dep)
+		INFO.Printf("Loading Go lib dependency: %v", dep)
 		getCmd := exec.Command("go", cmds...)
 		var errorPipe bytes.Buffer
 		getCmd.Stderr = &errorPipe
@@ -30,7 +31,7 @@ func commandUpdate(args []string) error {
 			return err
 		}
 	}
-	SUCC.Printf("Loaded dependencies: %v", rootConfig.Package.Dependencies)
+	SUCC.Printf("Loaded Go lib dependencies: \n\t%v", strings.Join(rootConfig.Package.Dependencies, "\n\t"))
 	return nil
 }
 
@@ -39,6 +40,8 @@ func commandRun(args []string) error {
 		ERROR.Printf("Failed to load project dependencies, %v", err)
 		return err
 	}
+	fmt.Println()
+	INFO.Printf("Waiting for the file changes...")
 
 	return nil
 }
