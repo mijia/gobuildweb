@@ -24,6 +24,7 @@ type PackageConfig struct {
 	Version      string
 	Authors      []string
 	Dependencies []string `toml:"deps"`
+	BuildOpts    []string `toml:"build_opts"`
 	OmitTests    []string `toml:"omit_tests"`
 }
 
