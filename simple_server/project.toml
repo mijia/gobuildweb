@@ -1,0 +1,16 @@
+# This is the TOML config file for project: go_build_web
+
+[package]
+name = "simple_server"
+version = "0.1"
+authors = ["Jia Mi <winters.mi@gmail.com>"]
+build_opts = ["-race"]
+deps = [
+    "github.com/julienschmidt/httprouter"
+]
+
+[assets]
+deps = [
+    "jquery@1.11.1",
+    "react"
+]
