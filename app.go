@@ -2,31 +2,31 @@ package main
 
 import "fmt"
 
-type WebApp struct {
+type AppShell struct {
 	args []string
 }
 
-func (app *WebApp) Run() error {
+func (app *AppShell) Run() error {
 	return nil
 }
 
-func (app *WebApp) Dist() error {
+func (app *AppShell) Dist() error {
 	fmt.Println()
 	INFO.Printf("Creating distribution package for %v-%v",
 		rootConfig.Package.Name, rootConfig.Package.Version)
 	return nil
 }
 
-func (app *WebApp) buildAssets() error {
+func (app *AppShell) buildAssets() error {
 	return nil
 }
 
-func (app *WebApp) buildBinary() error {
+func (app *AppShell) buildBinary() error {
 	return nil
 }
 
-func NewWebApp(args []string) *WebApp {
-	return &WebApp{
+func NewAppShell(args []string) *AppShell {
+	return &AppShell{
 		args: args,
 	}
 }

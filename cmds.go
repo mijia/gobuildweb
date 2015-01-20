@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -24,7 +23,7 @@ func commandDist(args []string) error {
 		return err
 	}
 
-	return NewWebApp(args).Dist()
+	return NewAppShell(args).Dist()
 }
 
 func commandRun(args []string) error {
@@ -55,12 +54,12 @@ func updateAssetsDeps() error {
 	cmds := []string{"install", ""}
 	for _, dep := range rootConfig.Assets.Dependencies {
 		cmds[len(cmds)-1] = dep
-		INFO.Printf("Loading NPM module: %v", dep)
+		INFO.Printf("Loading npm module: %v", dep)
 		installCmd := exec.Command("npm", cmds...)
-		var errorPipe bytes.Buffer
-		installCmd.Stderr = &errorPipe
+		installCmd.Stdout = os.Stdout
+		installCmd.Stderr = os.Stderr
 		if err := installCmd.Run(); err != nil {
-			ERROR.Printf("Error when run npm install: npm %v\n%v", cmds, errorPipe.String())
+			ERROR.Printf("Error when run npm install: npm %v, %v", cmds, err)
 			return err
 		}
 	}
@@ -80,10 +79,10 @@ func updateGolangDeps() error {
 		cmds[len(cmds)-1] = dep
 		INFO.Printf("Loading Go package dependency: %v", dep)
 		getCmd := exec.Command("go", cmds...)
-		var errorPipe bytes.Buffer
-		getCmd.Stderr = &errorPipe
+		getCmd.Stdout = os.Stdout
+		getCmd.Stderr = os.Stderr
 		if err := getCmd.Run(); err != nil {
-			ERROR.Printf("Error when run go get: go %v\n%v", cmds, errorPipe.String())
+			ERROR.Printf("Error when run go get: go %v, %v", cmds, err)
 			return err
 		}
 	}
@@ -108,7 +107,7 @@ func runAndWatch(args []string) error {
 	go watchProjectFiles(watcher)
 	INFO.Printf("Waiting for file changes...")
 
-	app := NewWebApp(args)
+	app := NewAppShell(args)
 	if err := app.Run(); err != nil {
 		return err
 	}
