@@ -7,13 +7,16 @@ import (
 	"log"
 	"os"
 	"runtime"
+	"sync"
 
 	"github.com/BurntSushi/toml"
 	"github.com/agtorre/gocolorize"
 )
 
 type ProjectConfig struct {
-	Package PackageConfig
+	sync.RWMutex
+	Package *PackageConfig
+	Assets  *AssetsConfig
 }
 
 type PackageConfig struct {
@@ -24,11 +27,14 @@ type PackageConfig struct {
 	OmitTests    []string `toml:"omit_tests"`
 }
 
+type AssetsConfig struct {
+	Dependencies []string `toml:"deps"`
+}
+
 func usage() {
 	fmt.Println("Usage:")
-	fmt.Println("  update    Update all your dependencies...")
-	fmt.Println("  build     Build your web application")
 	fmt.Println("  run       Will watch your file changes and run the application")
+	fmt.Println("  dist      Build your web application")
 	os.Exit(1)
 }
 
@@ -36,9 +42,8 @@ func main() {
 	fmt.Println(gocolorize.NewColor("magenta").Paint("gobuildweb > Build a Golang web application.\n"))
 
 	cmds := map[string]Command{
-		"run":    commandRun,
-		"dist":   commandDist,
-		"update": commandUpdate,
+		"run":  commandRun,
+		"dist": commandDist,
 	}
 	flag.Parse()
 	args := flag.Args()
@@ -77,6 +82,7 @@ func (cl *ColoredLogger) Write(p []byte) (n int, err error) {
 }
 
 var rootConfig ProjectConfig
+
 var (
 	INFO  *log.Logger
 	SUCC  *log.Logger

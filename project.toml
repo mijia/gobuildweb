@@ -1,11 +1,16 @@
 # This is the TOML config file for project: go_build_web
 
 [package]
-name = "go_build_web"
+name = "gobuildweb"
 version = "0.1"
 authors = ["Jia Mi <winters.mi@gmail.com>"]
 deps = [
     "github.com/BurntSushi/toml",
     "github.com/agtorre/gocolorize",
     "gopkg.in/fsnotify.v1"
+]
+
+[assets]
+deps = [
+    "jquery@1.11.1"
 ]
