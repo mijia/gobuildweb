@@ -163,18 +163,53 @@ func (pw *ProjectWatcher) addDirs(root string) error {
 }
 
 func (pw *ProjectWatcher) addTask(taskType TaskType, module string) {
+	pw.taskLock.Lock()
+	defer pw.taskLock.Unlock()
 
+	added := false
+	newTask := AppShellTask{taskType, module}
+	for i, task := range pw.tasks {
+		if task.taskType == taskType && task.module == module {
+			return
+		}
+		if task.taskType > taskType {
+			pw.tasks = append(pw.tasks[:i], append([]AppShellTask{newTask}, pw.tasks[i:]...)...)
+			added = true
+			break
+		}
+	}
+	if !added {
+		pw.tasks = append(pw.tasks, newTask)
+	}
+}
+
+func (pw *ProjectWatcher) hasGoTests(module string) bool {
+	has := false
+	ignoreTests := make(map[string]struct{})
+	rootConfig.RLock()
+	for _, t := range rootConfig.Package.OmitTests {
+		ignoreTests[t] = struct{}{}
+	}
+	rootConfig.RUnlock()
+	err := filepath.Walk(module, func(fname string, info os.FileInfo, err error) error {
+		if _, ok := ignoreTests[fname]; !ok && !info.IsDir() {
+			if strings.HasSuffix(fname, "_test.go") {
+				has = true
+			}
+		}
+		return nil
+	})
+	return err == nil && has
 }
 
 func (pw *ProjectWatcher) watchProject() {
-	tick := time.Tick(500 * time.Millisecond)
+	tick := time.Tick(800 * time.Millisecond)
 	for {
 		select {
 		case event := <-pw.watcher.Events:
 			if event.Name == "" || pw.isIgnoredDir(event.Name) {
 				break
 			}
-			INFO.Println("fs event:", event)
 
 			if event.Op&fsnotify.Create == fsnotify.Create {
 				if fi, err := os.Stat(event.Name); err == nil && fi.IsDir() {
@@ -190,18 +225,28 @@ func (pw *ProjectWatcher) watchProject() {
 						ERROR.Printf("Failed to remove directory from watching list [%v], %v",
 							event.Name, err)
 					}
+					// if the dir is under assets, we need to rebuild all the assets or sprites
+					// else we take it as a go code directory
+					// TODO
 				}
 				// maybe remove some source code
 				// TODO
 			} else if event.Op&fsnotify.Write == fsnotify.Write {
-
+				if strings.HasSuffix(event.Name, ".go") {
+					goModule := path.Dir(event.Name)
+					if pw.hasGoTests(goModule) {
+						pw.addTask(kTaskBinaryTest, goModule)
+					}
+					pw.addTask(kTaskBuildBinary, goModule)
+				}
 			}
 		case err := <-pw.watcher.Errors:
 			ERROR.Println("Error:", err)
 		case <-tick:
 			pw.taskLock.Lock()
 			if len(pw.tasks) > 0 {
-
+				pw.app.executeTask(pw.tasks...)
+				pw.tasks = make([]AppShellTask, 0)
 			}
 			pw.taskLock.Unlock()
 		}

@@ -12,3 +12,7 @@ Features:
     + Stylus css preprocessing
     + Assets uglify and minimization
     + Assets fingerprint
+
+License
+======
+MIT
