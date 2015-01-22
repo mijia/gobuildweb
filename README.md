@@ -1,5 +1,5 @@
 Build a Golang web application
-=====
+-----
 
 An in-house tool for building a Golang web application.
 

@@ -1,9 +1,9 @@
 # This is the TOML config file for project: go_build_web
 
 [package]
-name = "simple_server"
+name = "todo_server"
 version = "0.1"
-authors = ["Jia Mi <winters.mi@gmail.com>"]
+authors = ["Todo Server Ltd."]
 build_opts = ["-race"]
 deps = [
     "github.com/julienschmidt/httprouter"
@@ -11,6 +11,6 @@ deps = [
 
 [assets]
 deps = [
-    "jquery@1.11.1",
-    "react"
+    "react",
+    "reflux"
 ]

@@ -104,10 +104,10 @@ func runAndWatch(args []string) error {
 	if err := addProjectDirs(".", watcher); err != nil {
 		return err
 	}
-	go watchProjectFiles(watcher)
-	INFO.Printf("Waiting for file changes...")
-
 	app := NewAppShell(args)
+
+	go watchProjectFiles(watcher, app)
+	INFO.Printf("Waiting for file changes...")
 	if err := app.Run(); err != nil {
 		return err
 	}
@@ -144,7 +144,7 @@ func addProjectDirs(root string, watcher *fsnotify.Watcher) error {
 	})
 }
 
-func watchProjectFiles(watcher *fsnotify.Watcher) {
+func watchProjectFiles(watcher *fsnotify.Watcher, app *AppShell) {
 	for {
 		select {
 		case event := <-watcher.Events:
