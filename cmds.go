@@ -7,6 +7,8 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
 	"gopkg.in/fsnotify.v1"
 )
@@ -37,7 +39,7 @@ func commandRun(args []string) error {
 	}
 
 	fmt.Println()
-	if err := runAndWatch(args); err != nil {
+	if err := NewProjectWatcher().runAndWatch(".", args); err != nil {
 		ERROR.Printf("Failed to start watching project changes, %v", err)
 		return err
 	}
@@ -91,34 +93,50 @@ func updateGolangDeps() error {
 	return nil
 }
 
-var ignoreDirs = []string{".git", "node_modules"}
+type ProjectWatcher struct {
+	watcher    *fsnotify.Watcher
+	app        *AppShell
+	ignoreDirs []string
+	stopChan   chan struct{}
 
-func runAndWatch(args []string) error {
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		return err
-	}
-	defer watcher.Close()
-
-	done := make(chan bool)
-	if err := addProjectDirs(".", watcher); err != nil {
-		return err
-	}
-	app := NewAppShell(args)
-
-	go watchProjectFiles(watcher, app)
-	INFO.Printf("Waiting for file changes...")
-	if err := app.Run(); err != nil {
-		return err
-	}
-
-	<-done
-	return nil
+	taskLock sync.Mutex
+	tasks    []AppShellTask
 }
 
-func isIgnoredDir(dir string) bool {
+func NewProjectWatcher() *ProjectWatcher {
+	return &ProjectWatcher{
+		ignoreDirs: []string{".git", "node_modules"},
+		stopChan:   make(chan struct{}),
+		tasks:      make([]AppShellTask, 0),
+	}
+}
+
+func (pw *ProjectWatcher) runAndWatch(dir string, appArgs []string) error {
+	if watcher, err := fsnotify.NewWatcher(); err != nil {
+		return err
+	} else {
+		pw.watcher = watcher
+		defer pw.watcher.Close()
+
+		if err := pw.addDirs(dir); err != nil {
+			return err
+		}
+		pw.app = NewAppShell(appArgs)
+		go pw.watchProject()
+
+		INFO.Printf("Waiting for file changes ...")
+		if err := pw.app.Run(); err != nil {
+			return err
+		}
+
+		<-pw.stopChan
+		return nil
+	}
+}
+
+func (pw *ProjectWatcher) isIgnoredDir(dir string) bool {
 	cleanPath := strings.ToLower(path.Clean(dir))
-	for _, ignore := range ignoreDirs {
+	for _, ignore := range pw.ignoreDirs {
 		if strings.HasPrefix(cleanPath, ignore) {
 			return true
 		}
@@ -126,8 +144,8 @@ func isIgnoredDir(dir string) bool {
 	return false
 }
 
-func addProjectDirs(root string, watcher *fsnotify.Watcher) error {
-	if err := watcher.Add(root); err != nil {
+func (pw *ProjectWatcher) addDirs(root string) error {
+	if err := pw.watcher.Add(root); err != nil {
 		return err
 	}
 	INFO.Println("Watching", root)
@@ -135,8 +153,8 @@ func addProjectDirs(root string, watcher *fsnotify.Watcher) error {
 		if fname == root {
 			return nil
 		}
-		if info.IsDir() && !isIgnoredDir(fname) {
-			if err := addProjectDirs(fname, watcher); err != nil {
+		if info.IsDir() && !pw.isIgnoredDir(fname) {
+			if err := pw.addDirs(fname); err != nil {
 				return err
 			}
 		}
@@ -144,27 +162,31 @@ func addProjectDirs(root string, watcher *fsnotify.Watcher) error {
 	})
 }
 
-func watchProjectFiles(watcher *fsnotify.Watcher, app *AppShell) {
+func (pw *ProjectWatcher) addTask(taskType TaskType, module string) {
+
+}
+
+func (pw *ProjectWatcher) watchProject() {
+	tick := time.Tick(500 * time.Millisecond)
 	for {
 		select {
-		case event := <-watcher.Events:
-			if event.Name == "" || isIgnoredDir(event.Name) {
+		case event := <-pw.watcher.Events:
+			if event.Name == "" || pw.isIgnoredDir(event.Name) {
 				break
 			}
+			INFO.Println("fs event:", event)
 
 			if event.Op&fsnotify.Create == fsnotify.Create {
-				INFO.Println("Created,", event.Name)
 				if fi, err := os.Stat(event.Name); err == nil && fi.IsDir() {
-					if err := watcher.Add(event.Name); err != nil {
+					if err := pw.watcher.Add(event.Name); err != nil {
 						ERROR.Printf("Failed to add new directory into watching list[%v], %v",
 							event.Name, err)
 					}
 				}
 			} else if event.Op&fsnotify.Remove == fsnotify.Remove {
-				INFO.Println("Removed,", event.Name)
 				// maybe remove some dir
 				if fi, err := os.Stat(event.Name); err == nil && fi.IsDir() {
-					if err := watcher.Remove(event.Name); err != nil {
+					if err := pw.watcher.Remove(event.Name); err != nil {
 						ERROR.Printf("Failed to remove directory from watching list [%v], %v",
 							event.Name, err)
 					}
@@ -172,10 +194,16 @@ func watchProjectFiles(watcher *fsnotify.Watcher, app *AppShell) {
 				// maybe remove some source code
 				// TODO
 			} else if event.Op&fsnotify.Write == fsnotify.Write {
-				INFO.Println(event)
+
 			}
-		case err := <-watcher.Errors:
+		case err := <-pw.watcher.Errors:
 			ERROR.Println("Error:", err)
+		case <-tick:
+			pw.taskLock.Lock()
+			if len(pw.tasks) > 0 {
+
+			}
+			pw.taskLock.Unlock()
 		}
 	}
 }

@@ -92,10 +92,10 @@ var (
 )
 
 func init() {
-	INFO = log.New(os.Stdout, "[INFO] ", log.LstdFlags)
-	SUCC = log.New(&ColoredLogger{gocolorize.NewColor("green"), os.Stdout}, "[SUCC] ", log.LstdFlags)
-	WARN = log.New(&ColoredLogger{gocolorize.NewColor("yellow"), os.Stdout}, "[WARN] ", log.LstdFlags)
-	ERROR = log.New(&ColoredLogger{gocolorize.NewColor("red"), os.Stdout}, "[ERROR] ", log.LstdFlags)
+	INFO = log.New(os.Stdout, "[INFO] ", 0)
+	SUCC = log.New(&ColoredLogger{gocolorize.NewColor("green"), os.Stdout}, "[SUCC] ", 0)
+	WARN = log.New(&ColoredLogger{gocolorize.NewColor("yellow"), os.Stdout}, "[WARN] ", 0)
+	ERROR = log.New(&ColoredLogger{gocolorize.NewColor("red"), os.Stdout}, "[ERROR] ", 0)
 
 	runtime.GOMAXPROCS(runtime.NumCPU())
 }

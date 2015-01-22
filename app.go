@@ -10,11 +10,11 @@ import (
 type TaskType int
 
 const (
-	kTaskBuildBinary TaskType = iota
+	kTaskBuildSprite TaskType = iota
 	kTaskBuildAssets
-	kTaskRestart
-	kTaskKill
+	kTaskBuildBinary
 	kTaskBinaryTest
+	kTaskBinaryRestart
 )
 
 type AppShellTask struct {
@@ -31,10 +31,12 @@ type AppShell struct {
 
 func (app *AppShell) Run() error {
 	go app.startRunner()
-	app.taskChan <- AppShellTask{kTaskBuildAssets, "."}
-	app.taskChan <- AppShellTask{kTaskBinaryTest, "."}
-	app.taskChan <- AppShellTask{kTaskBuildBinary, ""}
-	app.taskChan <- AppShellTask{kTaskRestart, ""}
+	app.executeTask(
+		AppShellTask{kTaskBuildSprite, "."},
+		AppShellTask{kTaskBuildAssets, "."},
+		AppShellTask{kTaskBuildBinary, ""},
+		AppShellTask{kTaskBinaryTest, ""},
+	)
 	return nil
 }
 
@@ -52,7 +54,7 @@ func (app *AppShell) startRunner() {
 			app.curError = app.buildAssets(task.module)
 		case kTaskBuildBinary:
 			app.curError = app.buildBinary()
-		case kTaskRestart:
+		case kTaskBinaryRestart:
 			if app.curError == nil {
 				INFO.Println("Will restart the server")
 			} else {
@@ -60,6 +62,13 @@ func (app *AppShell) startRunner() {
 			}
 		}
 	}
+}
+
+func (app *AppShell) executeTask(tasks ...AppShellTask) {
+	for _, task := range tasks {
+		app.taskChan <- task
+	}
+	app.taskChan <- AppShellTask{kTaskBinaryRestart, ""}
 }
 
 func (app *AppShell) buildAssets(module string) error {
