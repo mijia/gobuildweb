@@ -14,5 +14,5 @@ Features:
     + Assets fingerprint
 
 License
-======
+------
 MIT

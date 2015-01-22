@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"gopkg.in/fsnotify.v1"
 )
 
@@ -47,6 +48,9 @@ func commandRun(args []string) error {
 }
 
 func updateAssetsDeps() error {
+	rootConfig.RLock()
+	defer rootConfig.RUnlock()
+
 	if rootConfig.Assets == nil || len(rootConfig.Assets.Dependencies) == 0 {
 		return nil
 	}
@@ -70,6 +74,9 @@ func updateAssetsDeps() error {
 }
 
 func updateGolangDeps() error {
+	rootConfig.RLock()
+	defer rootConfig.RUnlock()
+
 	if rootConfig.Package == nil || len(rootConfig.Package.Dependencies) == 0 {
 		return nil
 	}
@@ -202,6 +209,34 @@ func (pw *ProjectWatcher) hasGoTests(module string) bool {
 	return err == nil && has
 }
 
+func (pw *ProjectWatcher) updateConfig() {
+	INFO.Println("Reloading the project.toml file ...")
+	var newConfig ProjectConfig
+	if _, err := toml.DecodeFile("project.toml", &newConfig); err != nil {
+		ERROR.Printf("We found the project.toml has changed, but it contains some error, will omit it.")
+		ERROR.Printf("TOML Error: %v", err)
+		fmt.Println()
+		INFO.Println("Waiting for the file changes ...")
+	} else {
+		SUCC.Printf("Loaded the new project.toml, will update all the dependencies ...")
+		rootConfig.Lock()
+		rootConfig.Package = newConfig.Package
+		rootConfig.Assets = newConfig.Assets
+		rootConfig.Unlock()
+		if err := updateGolangDeps(); err != nil {
+			ERROR.Printf("Failed to load project Go dependencies, %v", err)
+			return
+		}
+		if err := updateAssetsDeps(); err != nil {
+			ERROR.Printf("Failed to load project assets dependencies, %v", err)
+			return
+		}
+		pw.addTask(kTaskBuildSprite, ".")
+		pw.addTask(kTaskBuildAssets, ".")
+		pw.addTask(kTaskBuildBinary, "")
+	}
+}
+
 func (pw *ProjectWatcher) watchProject() {
 	tick := time.Tick(800 * time.Millisecond)
 	for {
@@ -232,6 +267,9 @@ func (pw *ProjectWatcher) watchProject() {
 				// maybe remove some source code
 				// TODO
 			} else if event.Op&fsnotify.Write == fsnotify.Write {
+				if event.Name == "project.toml" {
+					pw.updateConfig()
+				}
 				if strings.HasSuffix(event.Name, ".go") {
 					goModule := path.Dir(event.Name)
 					if pw.hasGoTests(goModule) {
