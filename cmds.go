@@ -57,19 +57,32 @@ func updateAssetsDeps() error {
 
 	fmt.Println()
 	INFO.Printf("Start to loading assets dependencies...")
-	cmds := []string{"install", ""}
-	for _, dep := range rootConfig.Assets.Dependencies {
-		cmds[len(cmds)-1] = dep
+	checkParams := []string{"list", "--depth", "0", ""}
+	params := []string{"install", ""}
+	deps := make([]string, len(rootConfig.Assets.Dependencies), len(rootConfig.Assets.Dependencies)+1)
+	copy(deps, rootConfig.Assets.Dependencies)
+	// add all dev deps for xxxify
+	deps = append(deps, "browserify", "envify", "uglifyify", "reactify")
+	for _, dep := range deps {
+		checkParams[len(checkParams)-1] = dep
+		INFO.Printf("Checking npm module: %v", dep)
+		listCmd := exec.Command("npm", checkParams...)
+		if err := listCmd.Run(); err == nil {
+			// the module has been installed
+			continue
+		}
+
+		params[len(params)-1] = dep
 		INFO.Printf("Loading npm module: %v", dep)
-		installCmd := exec.Command("npm", cmds...)
+		installCmd := exec.Command("npm", params...)
 		installCmd.Stdout = os.Stdout
 		installCmd.Stderr = os.Stderr
 		if err := installCmd.Run(); err != nil {
-			ERROR.Printf("Error when run npm install: npm %v, %v", cmds, err)
+			ERROR.Printf("Error when run npm install: npm %v, %v", params, err)
 			return err
 		}
 	}
-	SUCC.Printf("Loaded assets dependencies: \n\t%v", strings.Join(rootConfig.Assets.Dependencies, "\n\t"))
+	SUCC.Printf("Loaded assets dependencies: \n\t%v", strings.Join(deps, "\n\t"))
 	return nil
 }
 
@@ -83,15 +96,15 @@ func updateGolangDeps() error {
 
 	fmt.Println()
 	INFO.Printf("Start to loading Go dependencies...")
-	cmds := []string{"get", ""}
+	params := []string{"get", ""}
 	for _, dep := range rootConfig.Package.Dependencies {
-		cmds[len(cmds)-1] = dep
+		params[len(params)-1] = dep
 		INFO.Printf("Loading Go package dependency: %v", dep)
-		getCmd := exec.Command("go", cmds...)
+		getCmd := exec.Command("go", params...)
 		getCmd.Stdout = os.Stdout
 		getCmd.Stderr = os.Stderr
 		if err := getCmd.Run(); err != nil {
-			ERROR.Printf("Error when run go get: go %v, %v", cmds, err)
+			ERROR.Printf("Error when run go get: go %v, %v", params, err)
 			return err
 		}
 	}
@@ -112,7 +125,7 @@ type ProjectWatcher struct {
 
 func NewProjectWatcher() *ProjectWatcher {
 	return &ProjectWatcher{
-		ignoreDirs: []string{".git", "node_modules"},
+		ignoreDirs: []string{".git", "node_modules", "public"},
 		stopChan:   make(chan struct{}),
 		tasks:      make([]AppShellTask, 0),
 	}
@@ -152,18 +165,12 @@ func (pw *ProjectWatcher) isIgnoredDir(dir string) bool {
 }
 
 func (pw *ProjectWatcher) addDirs(root string) error {
-	if err := pw.watcher.Add(root); err != nil {
-		return err
-	}
-	INFO.Println("Watching", root)
 	return filepath.Walk(root, func(fname string, info os.FileInfo, err error) error {
-		if fname == root {
-			return nil
-		}
 		if info.IsDir() && !pw.isIgnoredDir(fname) {
-			if err := pw.addDirs(fname); err != nil {
+			if err := pw.watcher.Add(fname); err != nil {
 				return err
 			}
+			INFO.Println("Watching", fname)
 		}
 		return nil
 	})
@@ -222,6 +229,7 @@ func (pw *ProjectWatcher) updateConfig() {
 		rootConfig.Lock()
 		rootConfig.Package = newConfig.Package
 		rootConfig.Assets = newConfig.Assets
+		rootConfig.Distribution = newConfig.Distribution
 		rootConfig.Unlock()
 		if err := updateGolangDeps(); err != nil {
 			ERROR.Printf("Failed to load project Go dependencies, %v", err)
@@ -231,8 +239,9 @@ func (pw *ProjectWatcher) updateConfig() {
 			ERROR.Printf("Failed to load project assets dependencies, %v", err)
 			return
 		}
-		pw.addTask(kTaskBuildSprite, ".")
-		pw.addTask(kTaskBuildAssets, ".")
+		pw.addTask(kTaskBuildImages, "")
+		pw.addTask(kTaskBuildStyles, "")
+		pw.addTask(kTaskBuildJavaScripts, "")
 		pw.addTask(kTaskBuildBinary, "")
 	}
 }
@@ -277,6 +286,8 @@ func (pw *ProjectWatcher) watchProject() {
 					}
 					pw.addTask(kTaskBuildBinary, goModule)
 				}
+				// js, css, file changes
+				// sprite images updated
 			}
 		case err := <-pw.watcher.Errors:
 			ERROR.Println("Error:", err)

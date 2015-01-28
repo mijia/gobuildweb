@@ -10,7 +10,24 @@ deps = [
 ]
 
 [assets]
+url_prefix = "/assets"
+image_exts = ["png", "jpg", "jpeg"]
 deps = [
-    "react",
-    "reflux"
+    "react@0.12.2",
+    "reflux",
+    "todomvc-common",
+]
+
+    [[assets.vendor_set]]
+    name = "vendor-react"
+    requires = ["react/addons", "reflux"]
+
+    [[assets.entry]]
+    name = "todo_app"
+    externals = ["vendor-react"]
+
+[distribution]
+build_opts = []
+cross_targets = [
+    ["darwin", "amd64"],
 ]

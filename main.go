@@ -15,8 +15,20 @@ import (
 
 type ProjectConfig struct {
 	sync.RWMutex
-	Package *PackageConfig
-	Assets  *AssetsConfig
+	Package      *PackageConfig
+	Assets       *AssetsConfig
+	Distribution *DistributionConfig
+}
+
+func (pc ProjectConfig) getAssetEntry(entryName string) (AssetEntry, bool) {
+	pc.RLock()
+	defer pc.RUnlock()
+	for _, entry := range append(pc.Assets.VendorSets, pc.Assets.Entries...) {
+		if entry.Name == entryName {
+			return entry, true
+		}
+	}
+	return AssetEntry{}, false
 }
 
 type PackageConfig struct {
@@ -29,7 +41,29 @@ type PackageConfig struct {
 }
 
 type AssetsConfig struct {
+	UrlPrefix    string       `toml:"url_prefix"`
+	ImageExts    []string     `toml:"image_exts"`
+	Dependencies []string     `toml:"deps"`
+	VendorSets   []AssetEntry `toml:"vendor_set"`
+	Entries      []AssetEntry `toml:"entry"`
+}
+
+type AssetEntry struct {
+	Name     string
+	Requires []string
+
+	// externals is a reference to other assets entry, need to expand this using
+	// the other assets' requires
+	Externals []string
+
+	// sub-modules update will rebuild this module
 	Dependencies []string `toml:"deps"`
+	BundleOpts   []string `toml:"bundle_opts"`
+}
+
+type DistributionConfig struct {
+	BuildOpts    []string   `toml:"build_opts"`
+	CrossTargets [][]string `toml:"cross_targets"`
 }
 
 func usage() {
@@ -66,7 +100,6 @@ func main() {
 			ERROR.Fatalf("Cannot decode the project.toml into TOML format, %v", err)
 		}
 		SUCC.Printf("Loaded project.toml... %s", rootConfig.Package.Name)
-
 		if err := cmd(args[1:]); err != nil {
 			ERROR.Fatalf("Executing command [%v] error, %v", args[0], err)
 		}

@@ -12,8 +12,9 @@ type TaskType int
 
 const (
 	// The Order is important
-	kTaskBuildSprite TaskType = iota
-	kTaskBuildAssets
+	kTaskBuildImages TaskType = iota
+	kTaskBuildStyles
+	kTaskBuildJavaScripts
 	kTaskBinaryTest
 	kTaskBuildBinary
 	kTaskBinaryRestart
@@ -25,37 +26,61 @@ type AppShellTask struct {
 }
 
 type AppShell struct {
-	binName  string
-	args     []string
-	taskChan chan AppShellTask
-	curError error
-	command  *exec.Cmd
+	binName      string
+	args         []string
+	isProduction bool
+	taskChan     chan AppShellTask
+	curError     error
+	command      *exec.Cmd
 }
 
 func (app *AppShell) Run() error {
+	app.isProduction = false
 	go app.startRunner()
 	app.executeTask(
-		AppShellTask{kTaskBuildSprite, "."},
-		AppShellTask{kTaskBuildAssets, "."},
+		AppShellTask{kTaskBuildImages, ""},
+		AppShellTask{kTaskBuildStyles, ""},
+		AppShellTask{kTaskBuildJavaScripts, ""},
 		AppShellTask{kTaskBuildBinary, ""},
 	)
 	return nil
 }
 
 func (app *AppShell) Dist() error {
+	app.isProduction = true
 	fmt.Println()
 	INFO.Printf("Creating distribution package for %v-%v",
 		rootConfig.Package.Name, rootConfig.Package.Version)
-	return nil
+
+	var err error
+	if err = app.buildImages(""); err != nil {
+		ERROR.Printf("Error when building images, %v", err)
+	} else if err = app.buildStyles(""); err != nil {
+		ERROR.Printf("Error when building stylesheets, %v", err)
+	} else if err = app.buildJavaScripts(""); err != nil {
+		ERROR.Printf("Error when building javascripts, %v", err)
+	} else if err = app.binaryTest(""); err != nil {
+		ERROR.Printf("You have failed test cases, %v", err)
+	} else if err == nil {
+		for _, target := range rootConfig.Distribution.CrossTargets {
+			if err = app.buildBinary(target...); err != nil {
+				ERROR.Printf("Error when building binary for %v, %v", target, err)
+			}
+		}
+	}
+	// TODO package all the binary and static assets
+	return err
 }
 
 func (app *AppShell) startRunner() {
 	for task := range app.taskChan {
 		switch task.taskType {
-		case kTaskBuildSprite:
-			app.curError = app.buildSprites(task.module)
-		case kTaskBuildAssets:
-			app.curError = app.buildAssets(task.module)
+		case kTaskBuildImages:
+			app.curError = app.buildImages(task.module)
+		case kTaskBuildStyles:
+			app.curError = app.buildStyles(task.module)
+		case kTaskBuildJavaScripts:
+			app.curError = app.buildJavaScripts(task.module)
 		case kTaskBinaryTest:
 			app.curError = app.binaryTest(task.module)
 		case kTaskBuildBinary:
@@ -121,15 +146,118 @@ func (app *AppShell) start() error {
 	return nil
 }
 
-func (app *AppShell) buildSprites(module string) error {
+func (app *AppShell) buildAssetsTraverse(functor func(entry string) error) error {
+	rootConfig.RLock()
+	vendors := rootConfig.Assets.VendorSets
+	entries := rootConfig.Assets.Entries
+	rootConfig.RUnlock()
+	for _, vendor := range vendors {
+		if err := functor(vendor.Name); err != nil {
+			return err
+		}
+	}
+	for _, entry := range entries {
+		if err := functor(entry.Name); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
-func (app *AppShell) buildAssets(module string) error {
+func (app *AppShell) checkAssetEntry(filename string) (proceed bool, err error) {
+	if fi, err := os.Stat(filename); os.IsNotExist(err) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	} else if fi.IsDir() {
+		return false, fmt.Errorf("%s is a directory!", filename)
+	}
+	return true, nil
+}
+
+func (app *AppShell) buildImages(entry string) error {
+	return nil
+}
+
+func (app *AppShell) buildStyles(entry string) error {
+	return nil
+}
+
+func (app *AppShell) buildJavaScripts(entry string) error {
+	if entry == "" {
+		if err := app.buildAssetsTraverse(app.buildJavaScripts); err != nil {
+			return err
+		}
+	}
+
+	if err := os.MkdirAll("public/javascripts", os.ModePerm|os.ModeDir); err != nil {
+		return err
+	}
+
+	filename := fmt.Sprintf("assets/javascripts/%s.js", entry)
+	target := fmt.Sprintf("public/javascripts/%s.js", entry)
+	if proceed, err := app.checkAssetEntry(filename); !proceed {
+		return err
+	}
+
+	// * Maybe a templates using images, styles assets links
+
+	// * run browserify
+	assetEntry, ok := rootConfig.getAssetEntry(entry)
+	if !ok {
+		return nil
+	}
+	params := make([]string, 0)
+	params = append(params, filename)
+	for _, require := range assetEntry.Requires {
+		params = append(params, "--require", require)
+	}
+	for _, external := range assetEntry.Externals {
+		if anEntry, ok := rootConfig.getAssetEntry(external); ok {
+			for _, require := range anEntry.Requires {
+				params = append(params, "--external", require)
+			}
+		}
+	}
+	for _, opt := range assetEntry.BundleOpts {
+		params = append(params, opt)
+	}
+	params = append(params, "--transform", "reactify")
+	params = append(params, "--transform", "envify")
+	if !app.isProduction {
+		params = append(params, "--debug")
+	} else {
+		params = append(params, "-g", "uglifyify")
+	}
+
+	params = append(params, "--outfile", target)
+	bfyCmd := exec.Command("./node_modules/browserify/bin/cmd.js", params...)
+	INFO.Printf("Building JavaScript assets: %s, %v", filename, bfyCmd.Args)
+	bfyCmd.Stderr = os.Stderr
+	bfyCmd.Stdout = os.Stdout
+	bfyCmd.Env = []string{
+		fmt.Sprintf("NODE_PATH=%s:./node_modules", os.Getenv("NODE_PATH")),
+		fmt.Sprintf("PATH=%s", os.Getenv("PATH")),
+	}
+	if app.isProduction {
+		bfyCmd.Env = append(bfyCmd.Env, "NODE_ENV=production")
+	} else {
+		bfyCmd.Env = append(bfyCmd.Env, "NODE_ENV=development")
+	}
+
+	if err := bfyCmd.Run(); err != nil {
+		ERROR.Printf("Error when building javascript asssets [%v], %v", bfyCmd.Args, err)
+		return err
+	}
+
+	// * generate the hash, clear old bundle, move to target
 	return nil
 }
 
 func (app *AppShell) binaryTest(module string) error {
+	if module == "" {
+		module = "."
+	}
 	testCmd := exec.Command("go", "test", "-v", module)
 	INFO.Printf("Testing Module[%s]: %v", module, testCmd.Args)
 	testCmd.Stderr = os.Stderr
@@ -141,31 +269,53 @@ func (app *AppShell) binaryTest(module string) error {
 	return nil
 }
 
-func (app *AppShell) buildBinary() error {
+func (app *AppShell) buildBinary(params ...string) error {
 	goOs, goArch := runtime.GOOS, runtime.GOARCH
-	if goosEnv := os.Getenv("GOOS"); goosEnv != "" {
-		goOs = goosEnv
-	}
-	if goarchEnv := os.Getenv("GOARCH"); goarchEnv != "" {
-		goArch = goarchEnv
+	isCrossCompile := false
+	if len(params) == 2 && (goOs != params[0] || goArch != params[1]) {
+		isCrossCompile = true
+		goOs, goArch = params[0], params[1]
 	}
 
-	buildOpts := make([]string, 0)
 	rootConfig.RLock()
 	binName := fmt.Sprintf("%s-%s.%s.%s",
 		rootConfig.Package.Name, rootConfig.Package.Version,
 		goOs, goArch)
-	copy(rootConfig.Package.BuildOpts, buildOpts)
+	var buildOpts []string
+	if app.isProduction {
+		buildOpts = make([]string, len(rootConfig.Distribution.BuildOpts))
+		copy(buildOpts, rootConfig.Distribution.BuildOpts)
+	} else {
+		buildOpts = make([]string, len(rootConfig.Package.BuildOpts))
+		copy(buildOpts, rootConfig.Package.BuildOpts)
+	}
 	rootConfig.RUnlock()
 
+	env := []string{
+		fmt.Sprintf("PATH=%s", os.Getenv("PATH")),
+		fmt.Sprintf("GOOS=%s", goOs),
+		fmt.Sprintf("GOARCH=%s", goArch),
+		fmt.Sprintf("GOPATH=%s", os.Getenv("GOPATH")),
+	}
 	if goOs == "windows" {
 		binName += ".exe"
 	}
+
+	if isCrossCompile {
+		if goRoot := os.Getenv("GOROOT"); goRoot == "" {
+			return fmt.Errorf("You need to set GOROOT env to make a cross compile.")
+		} else {
+			// run $GOROOT/src/make.bash --no-clean 2>&1
+			// TODO
+		}
+	}
+
 	flags := make([]string, 0, 3+len(buildOpts))
 	flags = append(flags, "build")
 	flags = append(flags, buildOpts...)
 	flags = append(flags, []string{"-o", binName}...)
 	buildCmd := exec.Command("go", flags...)
+	buildCmd.Env = env
 	INFO.Println("Running build:", buildCmd.Args)
 	start := time.Now()
 	if output, err := buildCmd.CombinedOutput(); err != nil {
