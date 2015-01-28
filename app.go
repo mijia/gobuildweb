@@ -1,10 +1,16 @@
 package main
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"path"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -175,23 +181,118 @@ func (app *AppShell) checkAssetEntry(filename string) (proceed bool, err error) 
 	return true, nil
 }
 
+func (app *AppShell) removeAssetFile(dir string, suffix string) error {
+	return filepath.Walk(dir, func(fname string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() && strings.HasSuffix(fname, suffix) {
+			filename := info.Name()
+			if strings.HasPrefix(filename, "fp") && strings.HasSuffix(filename, "-"+suffix) {
+				os.Remove(fname)
+			}
+		}
+		if fname != dir && info.IsDir() {
+			return filepath.SkipDir
+		}
+		return nil
+	})
+}
+
+func (app AppShell) copyAssetFile(dest, src string) error {
+	if srcFile, err := os.Open(src); err != nil {
+		return err
+	} else {
+		defer srcFile.Close()
+		if destFile, err := os.Create(dest); err != nil {
+			return err
+		} else {
+			defer destFile.Close()
+			_, err := io.Copy(destFile, srcFile)
+			return err
+		}
+	}
+}
+
+func (app *AppShell) addFingerPrint(assetDir, filename string) string {
+	target := path.Join(assetDir, filename)
+	if file, err := os.Open(target); err == nil {
+		defer file.Close()
+		h := md5.New()
+		if _, err := io.Copy(h, file); err == nil {
+			newName := fmt.Sprintf("fp%s-%s", hex.EncodeToString(h.Sum(nil)), filename)
+			newName = path.Join(assetDir, newName)
+			app.removeAssetFile("public/javascripts", filename)
+			if err := os.Rename(target, newName); err == nil {
+				return newName
+			}
+		}
+	}
+	return target
+}
+
+func (app *AppShell) resetAssetsDir(dir string) error {
+	if err := os.RemoveAll(dir); err != nil {
+		return fmt.Errorf("Cannot clean %s, %v", dir, err)
+	}
+	if err := os.MkdirAll(dir, os.ModePerm|os.ModeDir); err != nil {
+		return fmt.Errorf("Cannot mkdir %s, %v", dir, err)
+	}
+	return nil
+}
+
 func (app *AppShell) buildImages(entry string) error {
+	if entry == "" {
+		if err := app.resetAssetsDir("public/images"); err != nil {
+			return err
+		}
+		return app.buildAssetsTraverse(app.buildImages)
+	}
 	return nil
 }
 
 func (app *AppShell) buildStyles(entry string) error {
+	if entry == "" {
+		if err := app.resetAssetsDir("public/stylesheets"); err != nil {
+			return err
+		}
+		return app.buildAssetsTraverse(app.buildStyles)
+	}
+
+	filename := fmt.Sprintf("assets/stylesheets/%s.styl", entry)
+	isStylus := true
+	if proceed, _ := app.checkAssetEntry(filename); !proceed {
+		filename = fmt.Sprintf("assets/stylesheets/%s.css", entry)
+		if proceed, err := app.checkAssetEntry(filename); !proceed {
+			return err
+		} else {
+			isStylus = false
+		}
+	}
+
+	target := fmt.Sprintf("public/stylesheets/%s.css", entry)
+	// * Maybe it's a template using images, styles assets links
+	// TODO
+
+	// Maybe we need to call stylus preprocess
+	if isStylus {
+
+	} else {
+		if err := app.copyAssetFile(target, filename); err != nil {
+			return err
+		}
+	}
+
+	// * generate the hash, clear old bundle, move to target
+	target = app.addFingerPrint("public/stylesheets", entry+".css")
+	SUCC.Printf("Saved stylesheet asssets[%s]: %s", entry, target)
+
 	return nil
 }
 
 func (app *AppShell) buildJavaScripts(entry string) error {
 	if entry == "" {
-		if err := app.buildAssetsTraverse(app.buildJavaScripts); err != nil {
+		if err := app.resetAssetsDir("public/javascripts"); err != nil {
 			return err
 		}
-	}
-
-	if err := os.MkdirAll("public/javascripts", os.ModePerm|os.ModeDir); err != nil {
-		return err
+		return app.buildAssetsTraverse(app.buildJavaScripts)
 	}
 
 	filename := fmt.Sprintf("assets/javascripts/%s.js", entry)
@@ -200,7 +301,8 @@ func (app *AppShell) buildJavaScripts(entry string) error {
 		return err
 	}
 
-	// * Maybe a templates using images, styles assets links
+	// * Maybe it's a template using images, styles assets links
+	// TODO
 
 	// * run browserify
 	assetEntry, ok := rootConfig.getAssetEntry(entry)
@@ -251,6 +353,8 @@ func (app *AppShell) buildJavaScripts(entry string) error {
 	}
 
 	// * generate the hash, clear old bundle, move to target
+	target = app.addFingerPrint("public/javascripts", entry+".js")
+	SUCC.Printf("Saved javascript asssets[%s]: %s", entry, target)
 	return nil
 }
 

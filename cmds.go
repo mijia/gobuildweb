@@ -166,7 +166,7 @@ func (pw *ProjectWatcher) isIgnoredDir(dir string) bool {
 
 func (pw *ProjectWatcher) addDirs(root string) error {
 	return filepath.Walk(root, func(fname string, info os.FileInfo, err error) error {
-		if info.IsDir() && !pw.isIgnoredDir(fname) {
+		if err == nil && info.IsDir() && !pw.isIgnoredDir(fname) {
 			if err := pw.watcher.Add(fname); err != nil {
 				return err
 			}
