@@ -228,19 +228,21 @@ func (app *AppShell) addFingerPrint(assetDir, filename string) string {
 	return target
 }
 
-func (app *AppShell) resetAssetsDir(dir string) error {
+func (app *AppShell) resetAssetsDir(dir string, rebuild bool) error {
 	if err := os.RemoveAll(dir); err != nil {
 		return fmt.Errorf("Cannot clean %s, %v", dir, err)
 	}
-	if err := os.MkdirAll(dir, os.ModePerm|os.ModeDir); err != nil {
-		return fmt.Errorf("Cannot mkdir %s, %v", dir, err)
+	if rebuild {
+		if err := os.MkdirAll(dir, os.ModePerm|os.ModeDir); err != nil {
+			return fmt.Errorf("Cannot mkdir %s, %v", dir, err)
+		}
 	}
 	return nil
 }
 
 func (app *AppShell) buildImages(entry string) error {
 	if entry == "" {
-		if err := app.resetAssetsDir("public/images"); err != nil {
+		if err := app.resetAssetsDir("public/images", true); err != nil {
 			return err
 		}
 		return app.buildAssetsTraverse(app.buildImages)
@@ -250,7 +252,7 @@ func (app *AppShell) buildImages(entry string) error {
 
 func (app *AppShell) buildStyles(entry string) error {
 	if entry == "" {
-		if err := app.resetAssetsDir("public/stylesheets"); err != nil {
+		if err := app.resetAssetsDir("public/stylesheets", true); err != nil {
 			return err
 		}
 		return app.buildAssetsTraverse(app.buildStyles)
@@ -273,7 +275,30 @@ func (app *AppShell) buildStyles(entry string) error {
 
 	// Maybe we need to call stylus preprocess
 	if isStylus {
-
+		params := make([]string, 0)
+		params = append(params, "--use", "nib", filename, "--out", "public/stylesheets")
+		if app.isProduction {
+			params = append(params, "--compress")
+		} else {
+			params = append(params, "--sourcemap-inline")
+		}
+		stylusCmd := exec.Command("./node_modules/stylus/bin/stylus", params...)
+		INFO.Printf("Buidling StyleSheet assets: %s, %v", filename, stylusCmd.Args)
+		stylusCmd.Stderr = os.Stderr
+		stylusCmd.Stdout = os.Stdout
+		stylusCmd.Env = []string{
+			fmt.Sprintf("NODE_PATH=%s:./node_modules", os.Getenv("NODE_PATH")),
+			fmt.Sprintf("PATH=%s", os.Getenv("PATH")),
+		}
+		if app.isProduction {
+			stylusCmd.Env = append(stylusCmd.Env, "NODE_ENV=production")
+		} else {
+			stylusCmd.Env = append(stylusCmd.Env, "NODE_ENV=development")
+		}
+		if err := stylusCmd.Run(); err != nil {
+			ERROR.Printf("Error when building stylesheet asssets [%v], %v", stylusCmd.Args, err)
+			return err
+		}
 	} else {
 		if err := app.copyAssetFile(target, filename); err != nil {
 			return err
@@ -289,7 +314,7 @@ func (app *AppShell) buildStyles(entry string) error {
 
 func (app *AppShell) buildJavaScripts(entry string) error {
 	if entry == "" {
-		if err := app.resetAssetsDir("public/javascripts"); err != nil {
+		if err := app.resetAssetsDir("public/javascripts", true); err != nil {
 			return err
 		}
 		return app.buildAssetsTraverse(app.buildJavaScripts)

@@ -31,4 +31,5 @@ build_opts = []
 cross_targets = [
     ["darwin", "amd64"],
     ["linux", "amd64"],
+    ["windows", "amd64"],
 ]

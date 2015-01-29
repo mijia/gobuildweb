@@ -62,13 +62,13 @@ func updateAssetsDeps() error {
 	deps := make([]string, len(rootConfig.Assets.Dependencies), len(rootConfig.Assets.Dependencies)+1)
 	copy(deps, rootConfig.Assets.Dependencies)
 	// add all dev deps for xxxify
-	deps = append(deps, "browserify", "envify", "uglifyify", "reactify")
+	deps = append(deps, "browserify", "envify", "uglifyify", "reactify", "nib", "stylus")
 	for _, dep := range deps {
 		checkParams[len(checkParams)-1] = dep
-		INFO.Printf("Checking npm module: %v", dep)
 		listCmd := exec.Command("npm", checkParams...)
 		if err := listCmd.Run(); err == nil {
 			// the module has been installed
+			INFO.Printf("Checked npm module: %v", dep)
 			continue
 		}
 
