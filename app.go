@@ -375,9 +375,7 @@ func (app *AppShell) binaryTest(module string) error {
 
 func (app *AppShell) buildBinary(params ...string) error {
 	goOs, goArch := runtime.GOOS, runtime.GOARCH
-	isCrossCompile := false
 	if len(params) == 2 && (goOs != params[0] || goArch != params[1]) {
-		isCrossCompile = true
 		goOs, goArch = params[0], params[1]
 	}
 
@@ -403,15 +401,6 @@ func (app *AppShell) buildBinary(params ...string) error {
 	}
 	if goOs == "windows" {
 		binName += ".exe"
-	}
-
-	if isCrossCompile {
-		if goRoot := os.Getenv("GOROOT"); goRoot == "" {
-			return fmt.Errorf("You need to set GOROOT env to make a cross compile.")
-		} else {
-			// run $GOROOT/src/make.bash --no-clean 2>&1
-			// TODO
-		}
 	}
 
 	flags := make([]string, 0, 3+len(buildOpts))

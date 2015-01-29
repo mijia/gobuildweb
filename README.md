@@ -12,6 +12,8 @@ Features:
     + Stylus css preprocessing
     + Assets uglify and minimization
     + Assets fingerprint
++ Cross Compilation
+    + for this, please refer to http://dave.cheney.net/2012/09/08/an-introduction-to-cross-compilation-with-go
 
 License
 ------
