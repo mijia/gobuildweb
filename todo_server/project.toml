@@ -11,7 +11,7 @@ deps = [
 
 [assets]
 url_prefix = "/assets"
-image_exts = ["png", "jpg", "jpeg"]
+image_exts = [".png", ".jpg", ".jpeg"]
 deps = [
     "react@0.12.2",
     "reflux",
@@ -25,11 +25,11 @@ deps = [
     [[assets.entry]]
     name = "todo_app"
     externals = ["vendor-react"]
+    sprite_pixel_ratio = 2
 
 [distribution]
 build_opts = []
 cross_targets = [
     ["darwin", "amd64"],
     ["linux", "amd64"],
-    ["windows", "amd64"],
 ]

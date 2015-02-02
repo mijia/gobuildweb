@@ -56,6 +56,9 @@ type AssetEntry struct {
 	// the other assets' requires
 	Externals []string
 
+	// Sprites configurations
+	SpritePixelRatio int `toml:"sprite_pixel_ratio"`
+
 	// sub-modules update will rebuild this module
 	Dependencies []string `toml:"deps"`
 	BundleOpts   []string `toml:"bundle_opts"`

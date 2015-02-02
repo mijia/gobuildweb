@@ -4,6 +4,10 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
+	"image"
+	"image/draw"
+	_ "image/jpeg"
+	"image/png"
 	"io"
 	"os"
 	"os/exec"
@@ -170,12 +174,12 @@ func (app *AppShell) buildAssetsTraverse(functor func(entry string) error) error
 	return nil
 }
 
-func (app *AppShell) checkAssetEntry(filename string) (proceed bool, err error) {
+func (app *AppShell) checkAssetEntry(filename string, needsFile bool) (proceed bool, err error) {
 	if fi, err := os.Stat(filename); os.IsNotExist(err) {
 		return false, nil
 	} else if err != nil {
 		return false, err
-	} else if fi.IsDir() {
+	} else if fi.IsDir() && needsFile {
 		return false, fmt.Errorf("%s is a directory!", filename)
 	}
 	return true, nil
@@ -219,7 +223,7 @@ func (app *AppShell) addFingerPrint(assetDir, filename string) string {
 		if _, err := io.Copy(h, file); err == nil {
 			newName := fmt.Sprintf("fp%s-%s", hex.EncodeToString(h.Sum(nil)), filename)
 			newName = path.Join(assetDir, newName)
-			app.removeAssetFile("public/javascripts", filename)
+			app.removeAssetFile(assetDir, filename)
 			if err := os.Rename(target, newName); err == nil {
 				return newName
 			}
@@ -240,12 +244,123 @@ func (app *AppShell) resetAssetsDir(dir string, rebuild bool) error {
 	return nil
 }
 
+func (app *AppShell) getImageAssetsList(folderName string) ([][]string, error) {
+	allowedExts := make(map[string]struct{})
+	rootConfig.RLock()
+	for _, ext := range rootConfig.Assets.ImageExts {
+		allowedExts[ext] = struct{}{}
+	}
+	rootConfig.RUnlock()
+	imagesPath := make([][]string, 0)
+	err := filepath.Walk(folderName, func(fname string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() {
+			if _, ok := allowedExts[filepath.Ext(fname)]; ok {
+				imagesPath = append(imagesPath, []string{fname, info.Name()})
+			}
+		}
+		if fname != folderName && info.IsDir() {
+			return filepath.SkipDir
+		}
+		return nil
+	})
+	return imagesPath, err
+}
+
 func (app *AppShell) buildImages(entry string) error {
 	if entry == "" {
 		if err := app.resetAssetsDir("public/images", true); err != nil {
 			return err
 		}
 		return app.buildAssetsTraverse(app.buildImages)
+	}
+
+	folderName := fmt.Sprintf("assets/images/%s", entry)
+	if proceed, err := app.checkAssetEntry(folderName, false); !proceed {
+		return err
+	}
+	targetFolder := fmt.Sprintf("public/images/%s", entry)
+	if err := app.resetAssetsDir(targetFolder, true); err != nil {
+		return err
+	}
+
+	// copy the single image files
+	if imagesPath, err := app.getImageAssetsList(folderName); err != nil {
+		return err
+	} else {
+		for _, imgPath := range imagesPath {
+			target := fmt.Sprintf("public/images/%s/%s", entry, imgPath[1])
+			if err := app.copyAssetFile(target, imgPath[0]); err != nil {
+				return err
+			}
+			target = app.addFingerPrint(targetFolder, imgPath[1])
+			SUCC.Printf("Saved images asssets[%s]: %s", entry, target)
+		}
+	}
+
+	// check if we have a sprites folder under assets
+	return app.buildSprite(entry)
+}
+
+func (app *AppShell) buildSprite(entry string) error {
+	if entry == "" {
+		return nil
+	}
+	folderName := fmt.Sprintf("assets/images/%s/sprites", entry)
+	if proceed, err := app.checkAssetEntry(folderName, false); !proceed {
+		return err
+	}
+	targetFolder := fmt.Sprintf("public/images/%s", entry)
+	if err := os.MkdirAll(targetFolder, os.ModePerm|os.ModeDir); err != nil {
+		return fmt.Errorf("Cannot mkdir %s, %v", targetFolder, err)
+	}
+
+	allowedExts := make(map[string]struct{})
+	rootConfig.RLock()
+	for _, ext := range rootConfig.Assets.ImageExts {
+		allowedExts[ext] = struct{}{}
+	}
+	rootConfig.RUnlock()
+	if imagesPath, err := app.getImageAssetsList(folderName); err != nil {
+		return err
+	} else {
+		imageFiles := make([]*os.File, len(imagesPath))
+		images := make([]image.Image, len(imagesPath))
+		width, height := 0, 0
+		for i, imgPath := range imagesPath {
+			if fImage, err := os.Open(imgPath[0]); err != nil {
+				return fmt.Errorf("Cannot open image file: %s, %v", imgPath[0], err)
+			} else {
+				if image, _, err := image.Decode(fImage); err != nil {
+					return err
+				} else {
+					imageFiles[i] = fImage
+					images[i] = image
+					height += image.Bounds().Dy()
+					if width < image.Bounds().Dx() {
+						width = image.Bounds().Dx()
+					}
+				}
+			}
+		}
+		spriteImage := image.NewNRGBA(image.Rect(0, 0, width, height))
+		yOffset := 0
+		for i := range images {
+			imageFiles[i].Close()
+			newBounds := image.Rect(0, yOffset, images[i].Bounds().Dx(), yOffset+images[i].Bounds().Dy())
+			draw.Draw(spriteImage, newBounds, images[i], image.Point{0, 0}, draw.Src)
+			yOffset += images[i].Bounds().Dy()
+		}
+		target := path.Join(targetFolder, "sprites.png")
+		if spriteFile, err := os.Create(target); err != nil {
+			return err
+		} else {
+			defer spriteFile.Close()
+			if err := png.Encode(spriteFile, spriteImage); err != nil {
+				return err
+			}
+			target = app.addFingerPrint(targetFolder, "sprites.png")
+			SUCC.Printf("Saved sprites image[%s]: %s", entry, target)
+		}
 	}
 	return nil
 }
@@ -260,9 +375,9 @@ func (app *AppShell) buildStyles(entry string) error {
 
 	filename := fmt.Sprintf("assets/stylesheets/%s.styl", entry)
 	isStylus := true
-	if proceed, _ := app.checkAssetEntry(filename); !proceed {
+	if proceed, _ := app.checkAssetEntry(filename, true); !proceed {
 		filename = fmt.Sprintf("assets/stylesheets/%s.css", entry)
-		if proceed, err := app.checkAssetEntry(filename); !proceed {
+		if proceed, err := app.checkAssetEntry(filename, true); !proceed {
 			return err
 		} else {
 			isStylus = false
@@ -322,7 +437,7 @@ func (app *AppShell) buildJavaScripts(entry string) error {
 
 	filename := fmt.Sprintf("assets/javascripts/%s.js", entry)
 	target := fmt.Sprintf("public/javascripts/%s.js", entry)
-	if proceed, err := app.checkAssetEntry(filename); !proceed {
+	if proceed, err := app.checkAssetEntry(filename, true); !proceed {
 		return err
 	}
 
@@ -387,7 +502,7 @@ func (app *AppShell) binaryTest(module string) error {
 	if module == "" {
 		module = "."
 	}
-	testCmd := exec.Command("go", "test", "-v", module)
+	testCmd := exec.Command("go", "test", module)
 	INFO.Printf("Testing Module[%s]: %v", module, testCmd.Args)
 	testCmd.Stderr = os.Stderr
 	testCmd.Stdout = os.Stdout
