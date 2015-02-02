@@ -25,7 +25,7 @@ deps = [
     [[assets.entry]]
     name = "todo_app"
     externals = ["vendor-react"]
-    sprite_pixel_ratio = 2
+    sprite_pixel_ratio = 1
 
 [distribution]
 build_opts = []

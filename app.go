@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"text/template"
 	"time"
 )
 
@@ -360,6 +361,51 @@ func (app *AppShell) buildSprite(entry string) error {
 			}
 			target = app.addFingerPrint(targetFolder, "sprites.png")
 			SUCC.Printf("Saved sprites image[%s]: %s", entry, target)
+
+			spriteStylus := fmt.Sprintf("assets/stylesheets/sprites")
+			if err := os.MkdirAll(spriteStylus, os.ModePerm|os.ModeDir); err != nil {
+				return fmt.Errorf("Cannot mkdir %s, %v", spriteStylus, err)
+			}
+			spriteStylus = fmt.Sprintf("assets/stylesheets/sprites/%s.styl", entry)
+			if file, err := os.Create(spriteStylus); err != nil {
+				return fmt.Errorf("Cannot create the stylus file for sprite, %s, %v", spriteStylus, err)
+			} else {
+				defer file.Close()
+				rootConfig.RLock()
+				urlPrefix := rootConfig.Assets.UrlPrefix
+				rootConfig.RUnlock()
+				spriteEntry := SpriteEntry{
+					Entry:   entry,
+					Url:     fmt.Sprintf("%s/images/%s/%s", urlPrefix, entry, filepath.Base(target)),
+					Sprites: make([]SpriteImage, len(images)),
+				}
+
+				pixelRatio := 1
+				if assetEntry, ok := rootConfig.getAssetEntry(entry); ok && assetEntry.SpritePixelRatio > 0 {
+					pixelRatio = assetEntry.SpritePixelRatio
+				}
+				lastHeight := 0
+				for i, image := range images {
+					name := imagesPath[i][1]
+					name = name[:len(name)-len(filepath.Ext(name))]
+					width, height := image.Bounds().Dx(), image.Bounds().Dy()
+					if width%pixelRatio != 0 || height%pixelRatio != 0 {
+						WARN.Printf("You have images cannot be adjusted by the pixel ratio, %s, bounds=%v, pixelRatio=%d",
+							imagesPath[i][0], images[i].Bounds(), pixelRatio)
+					}
+					spriteEntry.Sprites[i] = SpriteImage{
+						Name:   name,
+						X:      0,
+						Y:      -1 * lastHeight,
+						Width:  width / pixelRatio,
+						Height: height / pixelRatio,
+					}
+					lastHeight = height / pixelRatio
+				}
+				if err := tmSprites.Execute(file, spriteEntry); err != nil {
+					return fmt.Errorf("Cannot generate stylus for sprites, %s, %v", spriteEntry, err)
+				}
+			}
 		}
 	}
 	return nil
@@ -566,4 +612,33 @@ func NewAppShell(args []string) *AppShell {
 		args:     args,
 		taskChan: make(chan AppShellTask),
 	}
+}
+
+type SpriteEntry struct {
+	Entry   string
+	Url     string
+	Sprites []SpriteImage
+}
+
+type SpriteImage struct {
+	Name   string
+	X      int
+	Y      int
+	Width  int
+	Height int
+}
+
+var tmplSprites = `{{$EntryName := .Entry }}
+{{range .Sprites}}${{$EntryName}}-{{.Name}} = {{.X}}px {{.Y}}px {{.Width}}px {{.Height}}px
+{{end}}
+{{.Entry}}-sprite($sprite)
+  background-image url("{{.Url}}")
+  background-position $sprite[0] $sprite[1]
+  width $sprite[2]
+  height $sprite[3]
+`
+var tmSprites *template.Template
+
+func init() {
+	tmSprites = template.Must(template.New("sprites").Parse(tmplSprites))
 }
