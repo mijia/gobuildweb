@@ -4,10 +4,6 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
-	"image"
-	"image/draw"
-	_ "image/jpeg"
-	"image/png"
 	"io"
 	"os"
 	"os/exec"
@@ -15,7 +11,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"text/template"
 	"time"
 
 	"github.com/mijia/gobuildweb/assets"
@@ -281,115 +276,6 @@ func (app *AppShell) buildImages(entry string) error {
 	return assets.ImageLibrary(*rootConfig.Assets, entry).Build(app.isProduction)
 }
 
-func (app *AppShell) buildSprite(entry string) error {
-	if entry == "" {
-		return nil
-	}
-	folderName := fmt.Sprintf("assets/images/%s/sprites", entry)
-	if proceed, err := app.checkAssetEntry(folderName, false); !proceed {
-		return err
-	}
-	targetFolder := fmt.Sprintf("public/images/%s", entry)
-	if err := os.MkdirAll(targetFolder, os.ModePerm|os.ModeDir); err != nil {
-		return fmt.Errorf("Cannot mkdir %s, %v", targetFolder, err)
-	}
-
-	allowedExts := make(map[string]struct{})
-	rootConfig.RLock()
-	for _, ext := range rootConfig.Assets.ImageExts {
-		allowedExts[ext] = struct{}{}
-	}
-	rootConfig.RUnlock()
-	if imagesPath, err := app.getImageAssetsList(folderName); err != nil {
-		return err
-	} else {
-		imageFiles := make([]*os.File, len(imagesPath))
-		images := make([]image.Image, len(imagesPath))
-		width, height := 0, 0
-		for i, imgPath := range imagesPath {
-			if fImage, err := os.Open(imgPath[0]); err != nil {
-				return fmt.Errorf("Cannot open image file: %s, %v", imgPath[0], err)
-			} else {
-				if image, _, err := image.Decode(fImage); err != nil {
-					return err
-				} else {
-					imageFiles[i] = fImage
-					images[i] = image
-					height += image.Bounds().Dy()
-					if width < image.Bounds().Dx() {
-						width = image.Bounds().Dx()
-					}
-				}
-			}
-		}
-		spriteImage := image.NewNRGBA(image.Rect(0, 0, width, height))
-		yOffset := 0
-		for i := range images {
-			imageFiles[i].Close()
-			newBounds := image.Rect(0, yOffset, images[i].Bounds().Dx(), yOffset+images[i].Bounds().Dy())
-			draw.Draw(spriteImage, newBounds, images[i], image.Point{0, 0}, draw.Src)
-			yOffset += images[i].Bounds().Dy()
-		}
-		target := path.Join(targetFolder, "sprites.png")
-		if spriteFile, err := os.Create(target); err != nil {
-			return err
-		} else {
-			defer spriteFile.Close()
-			if err := png.Encode(spriteFile, spriteImage); err != nil {
-				return err
-			}
-			target = app.addFingerPrint(targetFolder, "sprites.png")
-			loggers.SUCC.Printf("Saved sprites image[%s]: %s", entry, target)
-
-			spriteStylus := fmt.Sprintf("assets/stylesheets/sprites")
-			if err := os.MkdirAll(spriteStylus, os.ModePerm|os.ModeDir); err != nil {
-				return fmt.Errorf("Cannot mkdir %s, %v", spriteStylus, err)
-			}
-			spriteStylus = fmt.Sprintf("assets/stylesheets/sprites/%s.styl", entry)
-			if file, err := os.Create(spriteStylus); err != nil {
-				return fmt.Errorf("Cannot create the stylus file for sprite, %s, %v", spriteStylus, err)
-			} else {
-				defer file.Close()
-				rootConfig.RLock()
-				urlPrefix := rootConfig.Assets.UrlPrefix
-				rootConfig.RUnlock()
-				spriteEntry := SpriteEntry{
-					Entry:   entry,
-					Url:     fmt.Sprintf("%s/images/%s/%s", urlPrefix, entry, filepath.Base(target)),
-					Sprites: make([]SpriteImage, len(images)),
-				}
-
-				pixelRatio := 1
-				if assetEntry, ok := rootConfig.getAssetEntry(entry); ok && assetEntry.SpritePixelRatio > 0 {
-					pixelRatio = assetEntry.SpritePixelRatio
-				}
-				lastHeight := 0
-				for i, image := range images {
-					name := imagesPath[i][1]
-					name = name[:len(name)-len(filepath.Ext(name))]
-					width, height := image.Bounds().Dx(), image.Bounds().Dy()
-					if width%pixelRatio != 0 || height%pixelRatio != 0 {
-						loggers.WARN.Printf("You have images cannot be adjusted by the pixel ratio, %s, bounds=%v, pixelRatio=%d",
-							imagesPath[i][0], images[i].Bounds(), pixelRatio)
-					}
-					spriteEntry.Sprites[i] = SpriteImage{
-						Name:   name,
-						X:      0,
-						Y:      -1 * lastHeight,
-						Width:  width / pixelRatio,
-						Height: height / pixelRatio,
-					}
-					lastHeight = height / pixelRatio
-				}
-				if err := tmSprites.Execute(file, spriteEntry); err != nil {
-					return fmt.Errorf("Cannot generate stylus for sprites, %s, %v", spriteEntry, err)
-				}
-			}
-		}
-	}
-	return nil
-}
-
 func (app *AppShell) buildStyles(entry string) error {
 	if entry == "" {
 		if err := assets.ResetDir("public/stylesheets", true); err != nil {
@@ -403,7 +289,7 @@ func (app *AppShell) buildStyles(entry string) error {
 
 func (app *AppShell) buildJavaScripts(entry string) error {
 	if entry == "" {
-		if err := app.resetAssetsDir("public/javascripts", true); err != nil {
+		if err := assets.ResetDir("public/javascripts", true); err != nil {
 			return err
 		}
 		return app.buildAssetsTraverse(app.buildJavaScripts)
@@ -480,33 +366,4 @@ func NewAppShell(args []string) *AppShell {
 		args:     args,
 		taskChan: make(chan AppShellTask),
 	}
-}
-
-type SpriteEntry struct {
-	Entry   string
-	Url     string
-	Sprites []SpriteImage
-}
-
-type SpriteImage struct {
-	Name   string
-	X      int
-	Y      int
-	Width  int
-	Height int
-}
-
-var tmplSprites = `{{$EntryName := .Entry }}
-{{range .Sprites}}${{$EntryName}}-{{.Name}} = {{.X}}px {{.Y}}px {{.Width}}px {{.Height}}px
-{{end}}
-{{.Entry}}-sprite($sprite)
-  background-image url("{{.Url}}")
-  background-position $sprite[0] $sprite[1]
-  width $sprite[2]
-  height $sprite[3]
-`
-var tmSprites *template.Template
-
-func init() {
-	tmSprites = template.Must(template.New("sprites").Parse(tmplSprites))
 }

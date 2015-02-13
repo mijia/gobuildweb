@@ -4,14 +4,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/mijia/gobuildweb/loggers"
 )
-
-type _ImageItem struct {
-	name     string
-	fullpath string
-}
 
 type _ImageLibrary struct {
 	_Asset
@@ -48,30 +44,28 @@ func (il _ImageLibrary) Build(isProduction bool) error {
 	}
 
 	// check if we have sprite folders under assets
-	return il.buildSprites(il.entry)
+	return il.buildSprites(il.entry, isProduction)
 }
 
-func (il _ImageLibrary) buildSprites(entry string) error {
-
-	return nil
-}
-
-func (il _ImageLibrary) getImages(folderName string) ([]_ImageItem, error) {
-	allowedExts := make(map[string]struct{})
-	for _, ext := range il.config.ImageExts {
-		allowedExts[ext] = struct{}{}
-	}
-	items := make([]_ImageItem, 0)
+func (il _ImageLibrary) buildSprites(entry string, isProduction bool) error {
+	items := make([]_FileItem, 0)
+	folderName := fmt.Sprintf("assets/images/%s", il.entry)
 	err := filepath.Walk(folderName, func(fname string, info os.FileInfo, err error) error {
-		if err == nil && !info.IsDir() {
-			if _, ok := allowedExts[filepath.Ext(fname)]; ok {
-				items = append(items, _ImageItem{info.Name(), fname})
+		if err == nil && info.IsDir() && fname != folderName {
+			if strings.HasPrefix(info.Name(), "sprite") {
+				items = append(items, _FileItem{info.Name(), fname})
 			}
-		}
-		if fname != folderName && info.IsDir() {
 			return filepath.SkipDir
 		}
 		return nil
 	})
-	return items, err
+	if err != nil {
+		return err
+	}
+	for _, item := range items {
+		if err := Sprite(il.config, il.entry, item.name, item.fullpath).Build(isProduction); err != nil {
+			return fmt.Errorf("[ImageLibrary][%s] Error when generating sprite, %v", il.entry, err)
+		}
+	}
+	return nil
 }

@@ -121,6 +121,31 @@ func (a _Asset) getEnv(isProduction bool) []string {
 	return env
 }
 
+type _FileItem struct {
+	name     string
+	fullpath string
+}
+
+func (a _Asset) getImages(folderName string) ([]_FileItem, error) {
+	allowedExts := make(map[string]struct{})
+	for _, ext := range a.config.ImageExts {
+		allowedExts[ext] = struct{}{}
+	}
+	items := make([]_FileItem, 0)
+	err := filepath.Walk(folderName, func(fname string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() {
+			if _, ok := allowedExts[filepath.Ext(fname)]; ok {
+				items = append(items, _FileItem{info.Name(), fname})
+			}
+		}
+		if fname != folderName && info.IsDir() {
+			return filepath.SkipDir
+		}
+		return nil
+	})
+	return items, err
+}
+
 func ResetDir(dir string, rebuild bool) error {
 	if err := os.RemoveAll(dir); err != nil {
 		return fmt.Errorf("Cannot clean %s, %v", dir, err)
