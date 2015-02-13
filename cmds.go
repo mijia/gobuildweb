@@ -19,11 +19,11 @@ type Command func(args []string) error
 
 func commandDist(args []string) error {
 	if err := updateGolangDeps(); err != nil {
-		loggers.ERROR.Printf("Failed to load project #Golang dependencies, %v", err)
+		loggers.Error("Failed to load project #Golang dependencies, %v", err)
 		return err
 	}
 	if err := updateAssetsDeps(); err != nil {
-		loggers.ERROR.Printf("Failed to load project assets dependencies, %v", err)
+		loggers.Error("Failed to load project assets dependencies, %v", err)
 		return err
 	}
 
@@ -32,17 +32,17 @@ func commandDist(args []string) error {
 
 func commandRun(args []string) error {
 	if err := updateGolangDeps(); err != nil {
-		loggers.ERROR.Printf("Failed to load project Go dependencies, %v", err)
+		loggers.Error("Failed to load project Go dependencies, %v", err)
 		return err
 	}
 	if err := updateAssetsDeps(); err != nil {
-		loggers.ERROR.Printf("Failed to load project assets dependencies, %v", err)
+		loggers.Error("Failed to load project assets dependencies, %v", err)
 		return err
 	}
 
 	fmt.Println()
 	if err := NewProjectWatcher().runAndWatch(".", args); err != nil {
-		loggers.ERROR.Printf("Failed to start watching project changes, %v", err)
+		loggers.Error("Failed to start watching project changes, %v", err)
 		return err
 	}
 	return nil
@@ -57,7 +57,7 @@ func updateAssetsDeps() error {
 	}
 
 	fmt.Println()
-	loggers.INFO.Printf("Start to loading assets dependencies...")
+	loggers.Info("Start to loading assets dependencies...")
 	checkParams := []string{"list", "--depth", "0", ""}
 	params := []string{"install", ""}
 	deps := make([]string, len(rootConfig.Assets.Dependencies), len(rootConfig.Assets.Dependencies)+1)
@@ -69,21 +69,21 @@ func updateAssetsDeps() error {
 		listCmd := exec.Command("npm", checkParams...)
 		if err := listCmd.Run(); err == nil {
 			// the module has been installed
-			loggers.INFO.Printf("Checked npm module: %v", dep)
+			loggers.Info("Checked npm module: %v", dep)
 			continue
 		}
 
 		params[len(params)-1] = dep
-		loggers.INFO.Printf("Loading npm module: %v", dep)
+		loggers.Info("Loading npm module: %v", dep)
 		installCmd := exec.Command("npm", params...)
 		installCmd.Stdout = os.Stdout
 		installCmd.Stderr = os.Stderr
 		if err := installCmd.Run(); err != nil {
-			loggers.ERROR.Printf("Error when run npm install: npm %v, %v", params, err)
+			loggers.Error("Error when run npm install: npm %v, %v", params, err)
 			return err
 		}
 	}
-	loggers.SUCC.Printf("Loaded assets dependencies: \n\t%v", strings.Join(deps, "\n\t"))
+	loggers.Succ("Loaded assets dependencies: \n\t%v", strings.Join(deps, "\n\t"))
 	return nil
 }
 
@@ -96,20 +96,20 @@ func updateGolangDeps() error {
 	}
 
 	fmt.Println()
-	loggers.INFO.Printf("Start to loading Go dependencies...")
+	loggers.Info("Start to loading Go dependencies...")
 	params := []string{"get", ""}
 	for _, dep := range rootConfig.Package.Dependencies {
 		params[len(params)-1] = dep
-		loggers.INFO.Printf("Loading Go package dependency: %v", dep)
+		loggers.Info("Loading Go package dependency: %v", dep)
 		getCmd := exec.Command("go", params...)
 		getCmd.Stdout = os.Stdout
 		getCmd.Stderr = os.Stderr
 		if err := getCmd.Run(); err != nil {
-			loggers.ERROR.Printf("Error when run go get: go %v, %v", params, err)
+			loggers.Error("Error when run go get: go %v, %v", params, err)
 			return err
 		}
 	}
-	loggers.SUCC.Printf("Loaded Go package dependencies: \n\t%v",
+	loggers.Succ("Loaded Go package dependencies: \n\t%v",
 		strings.Join(rootConfig.Package.Dependencies, "\n\t"))
 	return nil
 }
@@ -145,7 +145,7 @@ func (pw *ProjectWatcher) runAndWatch(dir string, appArgs []string) error {
 		pw.app = NewAppShell(appArgs)
 		go pw.watchProject()
 
-		loggers.INFO.Printf("Waiting for file changes ...")
+		loggers.Info("Waiting for file changes ...")
 		if err := pw.app.Run(); err != nil {
 			return err
 		}
@@ -218,26 +218,26 @@ func (pw *ProjectWatcher) hasGoTests(module string) bool {
 }
 
 func (pw *ProjectWatcher) updateConfig() {
-	loggers.INFO.Println("Reloading the project.toml file ...")
+	loggers.Info("Reloading the project.toml file ...")
 	var newConfig ProjectConfig
 	if _, err := toml.DecodeFile("project.toml", &newConfig); err != nil {
-		loggers.ERROR.Printf("We found the project.toml has changed, but it contains some error, will omit it.")
-		loggers.ERROR.Printf("TOML Error: %v", err)
+		loggers.Error("We found the project.toml has changed, but it contains some error, will omit it.")
+		loggers.Error("TOML Error: %v", err)
 		fmt.Println()
-		loggers.INFO.Println("Waiting for the file changes ...")
+		loggers.Info("Waiting for the file changes ...")
 	} else {
-		loggers.SUCC.Printf("Loaded the new project.toml, will update all the dependencies ...")
+		loggers.Succ("Loaded the new project.toml, will update all the dependencies ...")
 		rootConfig.Lock()
 		rootConfig.Package = newConfig.Package
 		rootConfig.Assets = newConfig.Assets
 		rootConfig.Distribution = newConfig.Distribution
 		rootConfig.Unlock()
 		if err := updateGolangDeps(); err != nil {
-			loggers.ERROR.Printf("Failed to load project Go dependencies, %v", err)
+			loggers.Error("Failed to load project Go dependencies, %v", err)
 			return
 		}
 		if err := updateAssetsDeps(); err != nil {
-			loggers.ERROR.Printf("Failed to load project assets dependencies, %v", err)
+			loggers.Error("Failed to load project assets dependencies, %v", err)
 			return
 		}
 		pw.addTask(kTaskBuildImages, "")
@@ -259,7 +259,7 @@ func (pw *ProjectWatcher) watchProject() {
 			if event.Op&fsnotify.Create == fsnotify.Create {
 				if fi, err := os.Stat(event.Name); err == nil && fi.IsDir() {
 					if err := pw.watcher.Add(event.Name); err != nil {
-						loggers.ERROR.Printf("Failed to add new directory into watching list[%v], %v",
+						loggers.Error("Failed to add new directory into watching list[%v], %v",
 							event.Name, err)
 					}
 				}
@@ -267,7 +267,7 @@ func (pw *ProjectWatcher) watchProject() {
 				// maybe remove some dir
 				if fi, err := os.Stat(event.Name); err == nil && fi.IsDir() {
 					if err := pw.watcher.Remove(event.Name); err != nil {
-						loggers.ERROR.Printf("Failed to remove directory from watching list [%v], %v",
+						loggers.Error("Failed to remove directory from watching list [%v], %v",
 							event.Name, err)
 					}
 					// if the dir is under assets, we need to rebuild all the assets or sprites
@@ -291,7 +291,7 @@ func (pw *ProjectWatcher) watchProject() {
 				// sprite images updated
 			}
 		case err := <-pw.watcher.Errors:
-			loggers.ERROR.Println("Error:", err)
+			loggers.Error("Error: %v", err)
 		case <-tick:
 			pw.taskLock.Lock()
 			if len(pw.tasks) > 0 {

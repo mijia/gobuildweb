@@ -1,16 +1,10 @@
 package main
 
 import (
-	"crypto/md5"
-	"encoding/hex"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
-	"path"
-	"path/filepath"
 	"runtime"
-	"strings"
 	"time"
 
 	"github.com/mijia/gobuildweb/assets"
@@ -58,22 +52,22 @@ func (app *AppShell) Run() error {
 func (app *AppShell) Dist() error {
 	app.isProduction = true
 	fmt.Println()
-	loggers.INFO.Printf("Creating distribution package for %v-%v",
+	loggers.Info("Creating distribution package for %v-%v",
 		rootConfig.Package.Name, rootConfig.Package.Version)
 
 	var err error
 	if err = app.buildImages(""); err != nil {
-		loggers.ERROR.Printf("Error when building images, %v", err)
+		loggers.Error("Error when building images, %v", err)
 	} else if err = app.buildStyles(""); err != nil {
-		loggers.ERROR.Printf("Error when building stylesheets, %v", err)
+		loggers.Error("Error when building stylesheets, %v", err)
 	} else if err = app.buildJavaScripts(""); err != nil {
-		loggers.ERROR.Printf("Error when building javascripts, %v", err)
+		loggers.Error("Error when building javascripts, %v", err)
 	} else if err = app.binaryTest(""); err != nil {
-		loggers.ERROR.Printf("You have failed test cases, %v", err)
+		loggers.Error("You have failed test cases, %v", err)
 	} else if err == nil {
 		for _, target := range rootConfig.Distribution.CrossTargets {
 			if err = app.buildBinary(target...); err != nil {
-				loggers.ERROR.Printf("Error when building binary for %v, %v", target, err)
+				loggers.Error("Error when building binary for %v, %v", target, err)
 			}
 		}
 	}
@@ -97,17 +91,17 @@ func (app *AppShell) startRunner() {
 		case kTaskBinaryRestart:
 			if app.curError == nil {
 				if err := app.kill(); err != nil {
-					loggers.ERROR.Println("App cannot be killed, maybe you should restart the gobuildweb:", err)
+					loggers.Error("App cannot be killed, maybe you should restart the gobuildweb: %v", err)
 				} else {
 					if err := app.start(); err != nil {
-						loggers.ERROR.Println("App cannot be started, maybe you should restart the gobuildweb:", err)
+						loggers.Error("App cannot be started, maybe you should restart the gobuildweb: %v", err)
 					}
 				}
 			} else {
-				loggers.WARN.Printf("You have errors with current assets and binary, please fix that ...")
+				loggers.Warn("You have errors with current assets and binary, please fix that ...")
 			}
 			fmt.Println()
-			loggers.INFO.Println("Waiting for the file changes ...")
+			loggers.Info("Waiting for the file changes ...")
 		}
 	}
 }
@@ -132,7 +126,7 @@ func (app *AppShell) kill() error {
 		select {
 		case <-time.After(3 * time.Second):
 			if err := app.command.Process.Kill(); err != nil {
-				loggers.WARN.Println("failed to kill the app: ", err)
+				loggers.Warn("failed to kill the app: %v", err)
 			}
 		}
 		app.command = nil
@@ -148,7 +142,7 @@ func (app *AppShell) start() error {
 	if err := app.command.Start(); err != nil {
 		return err
 	}
-	loggers.SUCC.Printf("App is starting, %v", app.command.Args)
+	loggers.Succ("App is starting, %v", app.command.Args)
 	fmt.Println()
 	go app.command.Wait()
 	time.Sleep(500 * time.Millisecond)
@@ -173,101 +167,9 @@ func (app *AppShell) buildAssetsTraverse(functor func(entry string) error) error
 	return nil
 }
 
-func (app *AppShell) checkAssetEntry(filename string, needsFile bool) (proceed bool, err error) {
-	if fi, err := os.Stat(filename); os.IsNotExist(err) {
-		return false, nil
-	} else if err != nil {
-		return false, err
-	} else if fi.IsDir() && needsFile {
-		return false, fmt.Errorf("%s is a directory!", filename)
-	}
-	return true, nil
-}
-
-func (app *AppShell) removeAssetFile(dir string, suffix string) error {
-	return filepath.Walk(dir, func(fname string, info os.FileInfo, err error) error {
-		if err == nil && !info.IsDir() && strings.HasSuffix(fname, suffix) {
-			filename := info.Name()
-			if strings.HasPrefix(filename, "fp") && strings.HasSuffix(filename, "-"+suffix) {
-				os.Remove(fname)
-			}
-		}
-		if fname != dir && info.IsDir() {
-			return filepath.SkipDir
-		}
-		return nil
-	})
-}
-
-func (app AppShell) copyAssetFile(dest, src string) error {
-	if srcFile, err := os.Open(src); err != nil {
-		return err
-	} else {
-		defer srcFile.Close()
-		if destFile, err := os.Create(dest); err != nil {
-			return err
-		} else {
-			defer destFile.Close()
-			_, err := io.Copy(destFile, srcFile)
-			return err
-		}
-	}
-}
-
-func (app *AppShell) addFingerPrint(assetDir, filename string) string {
-	target := path.Join(assetDir, filename)
-	if file, err := os.Open(target); err == nil {
-		defer file.Close()
-		h := md5.New()
-		if _, err := io.Copy(h, file); err == nil {
-			newName := fmt.Sprintf("fp%s-%s", hex.EncodeToString(h.Sum(nil)), filename)
-			newName = path.Join(assetDir, newName)
-			app.removeAssetFile(assetDir, filename)
-			if err := os.Rename(target, newName); err == nil {
-				return newName
-			}
-		}
-	}
-	return target
-}
-
-func (app *AppShell) resetAssetsDir(dir string, rebuild bool) error {
-	if err := os.RemoveAll(dir); err != nil {
-		return fmt.Errorf("Cannot clean %s, %v", dir, err)
-	}
-	if rebuild {
-		if err := os.MkdirAll(dir, os.ModePerm|os.ModeDir); err != nil {
-			return fmt.Errorf("Cannot mkdir %s, %v", dir, err)
-		}
-	}
-	return nil
-}
-
-func (app *AppShell) getImageAssetsList(folderName string) ([][]string, error) {
-	allowedExts := make(map[string]struct{})
-	rootConfig.RLock()
-	for _, ext := range rootConfig.Assets.ImageExts {
-		allowedExts[ext] = struct{}{}
-	}
-	rootConfig.RUnlock()
-	imagesPath := make([][]string, 0)
-	err := filepath.Walk(folderName, func(fname string, info os.FileInfo, err error) error {
-		if err == nil && !info.IsDir() {
-			if _, ok := allowedExts[filepath.Ext(fname)]; ok {
-				imagesPath = append(imagesPath, []string{fname, info.Name()})
-			}
-		}
-		if fname != folderName && info.IsDir() {
-			return filepath.SkipDir
-		}
-		return nil
-	})
-	return imagesPath, err
-}
-
 func (app *AppShell) buildImages(entry string) error {
 	if entry == "" {
-		if err := app.resetAssetsDir("public/images", true); err != nil {
+		if err := assets.ResetDir("public/images", true); err != nil {
 			return err
 		}
 		return app.buildAssetsTraverse(app.buildImages)
@@ -303,11 +205,11 @@ func (app *AppShell) binaryTest(module string) error {
 		module = "."
 	}
 	testCmd := exec.Command("go", "test", module)
-	loggers.INFO.Printf("Testing Module[%s]: %v", module, testCmd.Args)
+	loggers.Info("Testing Module[%s]: %v", module, testCmd.Args)
 	testCmd.Stderr = os.Stderr
 	testCmd.Stdout = os.Stdout
 	if err := testCmd.Run(); err != nil {
-		loggers.ERROR.Printf("Error when testing go modules[%s], %v", module, err)
+		loggers.Error("Error when testing go modules[%s], %v", module, err)
 		return err
 	}
 	return nil
@@ -349,15 +251,15 @@ func (app *AppShell) buildBinary(params ...string) error {
 	flags = append(flags, []string{"-o", binName}...)
 	buildCmd := exec.Command("go", flags...)
 	buildCmd.Env = env
-	loggers.INFO.Println("Running build:", buildCmd.Args)
+	loggers.Debug("Running build: %v", buildCmd.Args)
 	start := time.Now()
 	if output, err := buildCmd.CombinedOutput(); err != nil {
-		loggers.ERROR.Println("Building failed:", string(output))
+		loggers.Error("Building failed: %s", string(output))
 		return err
 	}
 	app.binName = binName
 	duration := float64(time.Since(start).Nanoseconds()) / 1e6
-	loggers.SUCC.Printf("Got binary built %s, takes=%.3fms", binName, duration)
+	loggers.Succ("Got binary built %s, takes=%.3fms", binName, duration)
 	return nil
 }
 
