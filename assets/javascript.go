@@ -59,9 +59,9 @@ func (js _JavaScript) Build(isProduction bool) error {
 	}
 	params = append(params, "--transform", "envify")
 	if isProduction {
-		params = append(params, "--debug")
+		params = append(params, "-g", "uglifyify")
 	} else {
-		params = append(params, "-g", "uglify")
+		params = append(params, "--debug")
 	}
 	params = append(params, "--outfile", target)
 	cmd := exec.Command("./node_modules/browserify/bin/cmd.js", params...)
