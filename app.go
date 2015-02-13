@@ -17,6 +17,9 @@ import (
 	"strings"
 	"text/template"
 	"time"
+
+	"github.com/mijia/gobuildweb/assets"
+	"github.com/mijia/gobuildweb/loggers"
 )
 
 type TaskType int
@@ -60,22 +63,22 @@ func (app *AppShell) Run() error {
 func (app *AppShell) Dist() error {
 	app.isProduction = true
 	fmt.Println()
-	INFO.Printf("Creating distribution package for %v-%v",
+	loggers.INFO.Printf("Creating distribution package for %v-%v",
 		rootConfig.Package.Name, rootConfig.Package.Version)
 
 	var err error
 	if err = app.buildImages(""); err != nil {
-		ERROR.Printf("Error when building images, %v", err)
+		loggers.ERROR.Printf("Error when building images, %v", err)
 	} else if err = app.buildStyles(""); err != nil {
-		ERROR.Printf("Error when building stylesheets, %v", err)
+		loggers.ERROR.Printf("Error when building stylesheets, %v", err)
 	} else if err = app.buildJavaScripts(""); err != nil {
-		ERROR.Printf("Error when building javascripts, %v", err)
+		loggers.ERROR.Printf("Error when building javascripts, %v", err)
 	} else if err = app.binaryTest(""); err != nil {
-		ERROR.Printf("You have failed test cases, %v", err)
+		loggers.ERROR.Printf("You have failed test cases, %v", err)
 	} else if err == nil {
 		for _, target := range rootConfig.Distribution.CrossTargets {
 			if err = app.buildBinary(target...); err != nil {
-				ERROR.Printf("Error when building binary for %v, %v", target, err)
+				loggers.ERROR.Printf("Error when building binary for %v, %v", target, err)
 			}
 		}
 	}
@@ -99,17 +102,17 @@ func (app *AppShell) startRunner() {
 		case kTaskBinaryRestart:
 			if app.curError == nil {
 				if err := app.kill(); err != nil {
-					ERROR.Println("App cannot be killed, maybe you should restart the gobuildweb:", err)
+					loggers.ERROR.Println("App cannot be killed, maybe you should restart the gobuildweb:", err)
 				} else {
 					if err := app.start(); err != nil {
-						ERROR.Println("App cannot be started, maybe you should restart the gobuildweb:", err)
+						loggers.ERROR.Println("App cannot be started, maybe you should restart the gobuildweb:", err)
 					}
 				}
 			} else {
-				WARN.Printf("You have errors with current assets and binary, please fix that ...")
+				loggers.WARN.Printf("You have errors with current assets and binary, please fix that ...")
 			}
 			fmt.Println()
-			INFO.Println("Waiting for the file changes ...")
+			loggers.INFO.Println("Waiting for the file changes ...")
 		}
 	}
 }
@@ -134,7 +137,7 @@ func (app *AppShell) kill() error {
 		select {
 		case <-time.After(3 * time.Second):
 			if err := app.command.Process.Kill(); err != nil {
-				WARN.Println("failed to kill the app: ", err)
+				loggers.WARN.Println("failed to kill the app: ", err)
 			}
 		}
 		app.command = nil
@@ -150,7 +153,7 @@ func (app *AppShell) start() error {
 	if err := app.command.Start(); err != nil {
 		return err
 	}
-	SUCC.Printf("App is starting, %v", app.command.Args)
+	loggers.SUCC.Printf("App is starting, %v", app.command.Args)
 	fmt.Println()
 	go app.command.Wait()
 	time.Sleep(500 * time.Millisecond)
@@ -275,31 +278,7 @@ func (app *AppShell) buildImages(entry string) error {
 		return app.buildAssetsTraverse(app.buildImages)
 	}
 
-	folderName := fmt.Sprintf("assets/images/%s", entry)
-	if proceed, err := app.checkAssetEntry(folderName, false); !proceed {
-		return err
-	}
-	targetFolder := fmt.Sprintf("public/images/%s", entry)
-	if err := app.resetAssetsDir(targetFolder, true); err != nil {
-		return err
-	}
-
-	// copy the single image files
-	if imagesPath, err := app.getImageAssetsList(folderName); err != nil {
-		return err
-	} else {
-		for _, imgPath := range imagesPath {
-			target := fmt.Sprintf("public/images/%s/%s", entry, imgPath[1])
-			if err := app.copyAssetFile(target, imgPath[0]); err != nil {
-				return err
-			}
-			target = app.addFingerPrint(targetFolder, imgPath[1])
-			SUCC.Printf("Saved images asssets[%s]: %s", entry, target)
-		}
-	}
-
-	// check if we have a sprites folder under assets
-	return app.buildSprite(entry)
+	return assets.ImageLibrary(*rootConfig.Assets, entry).Build(app.isProduction)
 }
 
 func (app *AppShell) buildSprite(entry string) error {
@@ -360,7 +339,7 @@ func (app *AppShell) buildSprite(entry string) error {
 				return err
 			}
 			target = app.addFingerPrint(targetFolder, "sprites.png")
-			SUCC.Printf("Saved sprites image[%s]: %s", entry, target)
+			loggers.SUCC.Printf("Saved sprites image[%s]: %s", entry, target)
 
 			spriteStylus := fmt.Sprintf("assets/stylesheets/sprites")
 			if err := os.MkdirAll(spriteStylus, os.ModePerm|os.ModeDir); err != nil {
@@ -390,7 +369,7 @@ func (app *AppShell) buildSprite(entry string) error {
 					name = name[:len(name)-len(filepath.Ext(name))]
 					width, height := image.Bounds().Dx(), image.Bounds().Dy()
 					if width%pixelRatio != 0 || height%pixelRatio != 0 {
-						WARN.Printf("You have images cannot be adjusted by the pixel ratio, %s, bounds=%v, pixelRatio=%d",
+						loggers.WARN.Printf("You have images cannot be adjusted by the pixel ratio, %s, bounds=%v, pixelRatio=%d",
 							imagesPath[i][0], images[i].Bounds(), pixelRatio)
 					}
 					spriteEntry.Sprites[i] = SpriteImage{
@@ -413,64 +392,13 @@ func (app *AppShell) buildSprite(entry string) error {
 
 func (app *AppShell) buildStyles(entry string) error {
 	if entry == "" {
-		if err := app.resetAssetsDir("public/stylesheets", true); err != nil {
+		if err := assets.ResetDir("public/stylesheets", true); err != nil {
 			return err
 		}
 		return app.buildAssetsTraverse(app.buildStyles)
 	}
 
-	filename := fmt.Sprintf("assets/stylesheets/%s.styl", entry)
-	isStylus := true
-	if proceed, _ := app.checkAssetEntry(filename, true); !proceed {
-		filename = fmt.Sprintf("assets/stylesheets/%s.css", entry)
-		if proceed, err := app.checkAssetEntry(filename, true); !proceed {
-			return err
-		} else {
-			isStylus = false
-		}
-	}
-
-	target := fmt.Sprintf("public/stylesheets/%s.css", entry)
-	// * Maybe it's a template using images, styles assets links
-	// TODO
-
-	// Maybe we need to call stylus preprocess
-	if isStylus {
-		params := make([]string, 0)
-		params = append(params, "--use", "nib", filename, "--out", "public/stylesheets")
-		if app.isProduction {
-			params = append(params, "--compress")
-		} else {
-			params = append(params, "--sourcemap-inline")
-		}
-		stylusCmd := exec.Command("./node_modules/stylus/bin/stylus", params...)
-		INFO.Printf("Buidling StyleSheet assets: %s, %v", filename, stylusCmd.Args)
-		stylusCmd.Stderr = os.Stderr
-		stylusCmd.Stdout = os.Stdout
-		stylusCmd.Env = []string{
-			fmt.Sprintf("NODE_PATH=%s:./node_modules", os.Getenv("NODE_PATH")),
-			fmt.Sprintf("PATH=%s", os.Getenv("PATH")),
-		}
-		if app.isProduction {
-			stylusCmd.Env = append(stylusCmd.Env, "NODE_ENV=production")
-		} else {
-			stylusCmd.Env = append(stylusCmd.Env, "NODE_ENV=development")
-		}
-		if err := stylusCmd.Run(); err != nil {
-			ERROR.Printf("Error when building stylesheet asssets [%v], %v", stylusCmd.Args, err)
-			return err
-		}
-	} else {
-		if err := app.copyAssetFile(target, filename); err != nil {
-			return err
-		}
-	}
-
-	// * generate the hash, clear old bundle, move to target
-	target = app.addFingerPrint("public/stylesheets", entry+".css")
-	SUCC.Printf("Saved stylesheet asssets[%s]: %s", entry, target)
-
-	return nil
+	return assets.StyleSheet(*rootConfig.Assets, entry).Build(app.isProduction)
 }
 
 func (app *AppShell) buildJavaScripts(entry string) error {
@@ -481,67 +409,7 @@ func (app *AppShell) buildJavaScripts(entry string) error {
 		return app.buildAssetsTraverse(app.buildJavaScripts)
 	}
 
-	filename := fmt.Sprintf("assets/javascripts/%s.js", entry)
-	target := fmt.Sprintf("public/javascripts/%s.js", entry)
-	if proceed, err := app.checkAssetEntry(filename, true); !proceed {
-		return err
-	}
-
-	// * Maybe it's a template using images, styles assets links
-	// TODO
-
-	// * run browserify
-	assetEntry, ok := rootConfig.getAssetEntry(entry)
-	if !ok {
-		return nil
-	}
-	params := make([]string, 0)
-	params = append(params, filename)
-	for _, require := range assetEntry.Requires {
-		params = append(params, "--require", require)
-	}
-	for _, external := range assetEntry.Externals {
-		if anEntry, ok := rootConfig.getAssetEntry(external); ok {
-			for _, require := range anEntry.Requires {
-				params = append(params, "--external", require)
-			}
-		}
-	}
-	for _, opt := range assetEntry.BundleOpts {
-		params = append(params, opt)
-	}
-	params = append(params, "--transform", "reactify")
-	params = append(params, "--transform", "envify")
-	if !app.isProduction {
-		params = append(params, "--debug")
-	} else {
-		params = append(params, "-g", "uglifyify")
-	}
-
-	params = append(params, "--outfile", target)
-	bfyCmd := exec.Command("./node_modules/browserify/bin/cmd.js", params...)
-	INFO.Printf("Building JavaScript assets: %s, %v", filename, bfyCmd.Args)
-	bfyCmd.Stderr = os.Stderr
-	bfyCmd.Stdout = os.Stdout
-	bfyCmd.Env = []string{
-		fmt.Sprintf("NODE_PATH=%s:./node_modules", os.Getenv("NODE_PATH")),
-		fmt.Sprintf("PATH=%s", os.Getenv("PATH")),
-	}
-	if app.isProduction {
-		bfyCmd.Env = append(bfyCmd.Env, "NODE_ENV=production")
-	} else {
-		bfyCmd.Env = append(bfyCmd.Env, "NODE_ENV=development")
-	}
-
-	if err := bfyCmd.Run(); err != nil {
-		ERROR.Printf("Error when building javascript asssets [%v], %v", bfyCmd.Args, err)
-		return err
-	}
-
-	// * generate the hash, clear old bundle, move to target
-	target = app.addFingerPrint("public/javascripts", entry+".js")
-	SUCC.Printf("Saved javascript asssets[%s]: %s", entry, target)
-	return nil
+	return assets.JavaScript(*rootConfig.Assets, entry).Build(app.isProduction)
 }
 
 func (app *AppShell) binaryTest(module string) error {
@@ -549,11 +417,11 @@ func (app *AppShell) binaryTest(module string) error {
 		module = "."
 	}
 	testCmd := exec.Command("go", "test", module)
-	INFO.Printf("Testing Module[%s]: %v", module, testCmd.Args)
+	loggers.INFO.Printf("Testing Module[%s]: %v", module, testCmd.Args)
 	testCmd.Stderr = os.Stderr
 	testCmd.Stdout = os.Stdout
 	if err := testCmd.Run(); err != nil {
-		ERROR.Printf("Error when testing go modules[%s], %v", module, err)
+		loggers.ERROR.Printf("Error when testing go modules[%s], %v", module, err)
 		return err
 	}
 	return nil
@@ -595,15 +463,15 @@ func (app *AppShell) buildBinary(params ...string) error {
 	flags = append(flags, []string{"-o", binName}...)
 	buildCmd := exec.Command("go", flags...)
 	buildCmd.Env = env
-	INFO.Println("Running build:", buildCmd.Args)
+	loggers.INFO.Println("Running build:", buildCmd.Args)
 	start := time.Now()
 	if output, err := buildCmd.CombinedOutput(); err != nil {
-		ERROR.Println("Building failed:", string(output))
+		loggers.ERROR.Println("Building failed:", string(output))
 		return err
 	}
 	app.binName = binName
 	duration := float64(time.Since(start).Nanoseconds()) / 1e6
-	SUCC.Printf("Got binary built %s, takes=%.3fms", binName, duration)
+	loggers.SUCC.Printf("Got binary built %s, takes=%.3fms", binName, duration)
 	return nil
 }
 

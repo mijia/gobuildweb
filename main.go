@@ -3,24 +3,24 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io"
-	"log"
 	"os"
 	"runtime"
 	"sync"
 
 	"github.com/BurntSushi/toml"
 	"github.com/agtorre/gocolorize"
+	"github.com/mijia/gobuildweb/assets"
+	"github.com/mijia/gobuildweb/loggers"
 )
 
 type ProjectConfig struct {
 	sync.RWMutex
 	Package      *PackageConfig
-	Assets       *AssetsConfig
+	Assets       *assets.Config
 	Distribution *DistributionConfig
 }
 
-func (pc ProjectConfig) getAssetEntry(entryName string) (AssetEntry, bool) {
+func (pc ProjectConfig) getAssetEntry(entryName string) (assets.Entry, bool) {
 	pc.RLock()
 	defer pc.RUnlock()
 	for _, entry := range append(pc.Assets.VendorSets, pc.Assets.Entries...) {
@@ -28,7 +28,7 @@ func (pc ProjectConfig) getAssetEntry(entryName string) (AssetEntry, bool) {
 			return entry, true
 		}
 	}
-	return AssetEntry{}, false
+	return assets.Entry{}, false
 }
 
 type PackageConfig struct {
@@ -38,30 +38,6 @@ type PackageConfig struct {
 	Dependencies []string `toml:"deps"`
 	BuildOpts    []string `toml:"build_opts"`
 	OmitTests    []string `toml:"omit_tests"`
-}
-
-type AssetsConfig struct {
-	UrlPrefix    string       `toml:"url_prefix"`
-	ImageExts    []string     `toml:"image_exts"`
-	Dependencies []string     `toml:"deps"`
-	VendorSets   []AssetEntry `toml:"vendor_set"`
-	Entries      []AssetEntry `toml:"entry"`
-}
-
-type AssetEntry struct {
-	Name     string
-	Requires []string
-
-	// externals is a reference to other assets entry, need to expand this using
-	// the other assets' requires
-	Externals []string
-
-	// Sprites configurations
-	SpritePixelRatio int `toml:"sprite_pixel_ratio"`
-
-	// sub-modules update will rebuild this module
-	Dependencies []string `toml:"deps"`
-	BundleOpts   []string `toml:"bundle_opts"`
 }
 
 type DistributionConfig struct {
@@ -77,6 +53,7 @@ func usage() {
 }
 
 func main() {
+	loggers.IsDebug = os.Getenv("GBW_DEBUG") == "1"
 	fmt.Println(gocolorize.NewColor("magenta").Paint("gobuildweb > Build a Golang web application.\n"))
 
 	cmds := map[string]Command{
@@ -92,46 +69,25 @@ func main() {
 		usage()
 	} else {
 		if fi, err := os.Stat("project.toml"); os.IsNotExist(err) {
-			ERROR.Fatalf("Please provide a project.toml for web project.")
+			loggers.ERROR.Fatalf("Please provide a project.toml for web project.")
 		} else if err != nil {
-			ERROR.Fatalf("Accessing project.toml file error, %v.", err)
+			loggers.ERROR.Fatalf("Accessing project.toml file error, %v.", err)
 		} else if fi.IsDir() {
-			ERROR.Fatalf("project.toml cannot be a directory.")
+			loggers.ERROR.Fatalf("project.toml cannot be a directory.")
 		}
 
 		if _, err := toml.DecodeFile("project.toml", &rootConfig); err != nil {
-			ERROR.Fatalf("Cannot decode the project.toml into TOML format, %v", err)
+			loggers.ERROR.Fatalf("Cannot decode the project.toml into TOML format, %v", err)
 		}
-		SUCC.Printf("Loaded project.toml... %s", rootConfig.Package.Name)
+		loggers.SUCC.Printf("Loaded project.toml... %s", rootConfig.Package.Name)
 		if err := cmd(args[1:]); err != nil {
-			ERROR.Fatalf("Executing command [%v] error, %v", args[0], err)
+			loggers.ERROR.Fatalf("Executing command [%v] error, %v", args[0], err)
 		}
 	}
 }
 
-type ColoredLogger struct {
-	c gocolorize.Colorize
-	w io.Writer
-}
-
-func (cl *ColoredLogger) Write(p []byte) (n int, err error) {
-	return cl.w.Write([]byte(cl.c.Paint(string(p))))
-}
-
 var rootConfig ProjectConfig
 
-var (
-	INFO  *log.Logger
-	SUCC  *log.Logger
-	WARN  *log.Logger
-	ERROR *log.Logger
-)
-
 func init() {
-	INFO = log.New(os.Stdout, "[INFO] ", 0)
-	SUCC = log.New(&ColoredLogger{gocolorize.NewColor("green"), os.Stdout}, "[SUCC] ", 0)
-	WARN = log.New(&ColoredLogger{gocolorize.NewColor("yellow"), os.Stdout}, "[WARN] ", 0)
-	ERROR = log.New(&ColoredLogger{gocolorize.NewColor("red"), os.Stdout}, "[ERROR] ", 0)
-
 	runtime.GOMAXPROCS(runtime.NumCPU())
 }
