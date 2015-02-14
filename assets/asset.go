@@ -20,6 +20,10 @@ type Config struct {
 }
 
 func (config Config) getAssetEntry(entryName string) (Entry, bool) {
+	return GetEntryConfig(config, entryName)
+}
+
+func GetEntryConfig(config Config, entryName string) (Entry, bool) {
 	for _, entry := range append(config.VendorSets, config.Entries...) {
 		if entry.Name == entryName {
 			return entry, true

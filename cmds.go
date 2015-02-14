@@ -136,19 +136,18 @@ func (pw *ProjectWatcher) runAndWatch(dir string, appArgs []string) error {
 	if watcher, err := fsnotify.NewWatcher(); err != nil {
 		return err
 	} else {
-		pw.watcher = watcher
-		defer pw.watcher.Close()
-
-		if err := pw.addDirs(dir); err != nil {
-			return err
-		}
 		pw.app = NewAppShell(appArgs)
-		go pw.watchProject()
-
-		loggers.Info("Waiting for file changes ...")
 		if err := pw.app.Run(); err != nil {
 			return err
 		}
+
+		pw.watcher = watcher
+		defer pw.watcher.Close()
+		if err := pw.addDirs(dir); err != nil {
+			return err
+		}
+		go pw.watchProject()
+		loggers.Info("Waiting for file changes ...")
 
 		<-pw.stopChan
 		return nil
@@ -171,7 +170,7 @@ func (pw *ProjectWatcher) addDirs(root string) error {
 			if err := pw.watcher.Add(fname); err != nil {
 				return err
 			}
-			loggers.Debug("Watching", fname)
+			loggers.Debug("Watching %s", fname)
 		}
 		return nil
 	})
@@ -247,48 +246,87 @@ func (pw *ProjectWatcher) updateConfig() {
 	}
 }
 
+func (pw *ProjectWatcher) maybeGoCodeChanged(fname string) {
+	if strings.HasSuffix(fname, ".go") {
+		goModule := path.Dir(fname)
+		if pw.hasGoTests(goModule) {
+			pw.addTask(kTaskBinaryTest, goModule)
+		}
+		pw.addTask(kTaskBuildBinary, goModule)
+	}
+}
+
+func (pw *ProjectWatcher) maybeAssetsChanged(fname string) {
+	if !strings.HasPrefix(fname, "assets/") {
+		return
+	}
+	categories := []string{"assets/images/", "assets/stylesheets/", "assets/javascripts/"}
+	taskTypes := []TaskType{kTaskBuildImages, kTaskBuildStyles, kTaskBuildJavaScripts}
+	for i, category := range categories {
+		if strings.HasPrefix(fname, category) {
+			name := fname[len(category):]
+			if index := strings.Index(name, "/"); index != -1 {
+				name = name[:index]
+			} else {
+				name = name[:len(name)-len(filepath.Ext(name))]
+			}
+			if _, ok := rootConfig.getAssetEntry(name); ok {
+				pw.addTask(taskTypes[i], name)
+			} else {
+				// we naively think this as a global change
+				pw.addTask(taskTypes[i], "")
+			}
+		}
+	}
+}
+
 func (pw *ProjectWatcher) watchProject() {
 	tick := time.Tick(800 * time.Millisecond)
 	for {
 		select {
 		case event := <-pw.watcher.Events:
-			if event.Name == "" || pw.isIgnoredDir(event.Name) {
+			if event.Name == "" ||
+				pw.isIgnoredDir(event.Name) ||
+				strings.HasSuffix(event.Name, ".DS_Store") {
 				break
 			}
-
-			if event.Op&fsnotify.Create == fsnotify.Create {
-				if fi, err := os.Stat(event.Name); err == nil && fi.IsDir() {
-					if err := pw.watcher.Add(event.Name); err != nil {
-						loggers.Error("Failed to add new directory into watching list[%v], %v",
-							event.Name, err)
+			fmt.Println(event)
+			if event.Op&fsnotify.Create == fsnotify.Create || event.Op&fsnotify.Write == fsnotify.Write {
+				if fi, err := os.Stat(event.Name); err == nil {
+					if fi.IsDir() {
+						if err := pw.watcher.Add(event.Name); err != nil {
+							loggers.Error("Failed to add new directory into watching list[%v], %v",
+								event.Name, err)
+						} else {
+							loggers.Debug("Watching %s", event.Name)
+						}
+					} else {
+						if event.Name == "project.toml" {
+							pw.updateConfig()
+						}
+						pw.maybeGoCodeChanged(event.Name)
+						pw.maybeAssetsChanged(event.Name)
 					}
 				}
-			} else if event.Op&fsnotify.Remove == fsnotify.Remove {
+			} else if event.Op&fsnotify.Remove == fsnotify.Remove || event.Op&fsnotify.Rename == fsnotify.Rename {
 				// maybe remove some dir
-				if fi, err := os.Stat(event.Name); err == nil && fi.IsDir() {
-					if err := pw.watcher.Remove(event.Name); err != nil {
-						loggers.Error("Failed to remove directory from watching list [%v], %v",
-							event.Name, err)
+				if fi, err := os.Stat(event.Name); err == nil {
+					if fi.IsDir() {
+						if err := pw.watcher.Remove(event.Name); err != nil {
+							loggers.Error("Failed to remove directory from watching list [%v], %v",
+								event.Name, err)
+						}
+						// if the dir is under assets, we need to rebuild all the assets or sprites
+						// else we take it as a go code directory
+						// TODO
+					} else {
+						if event.Name == "project.toml" {
+							panic("Please don't hurt the project.toml")
+						}
+						// maybe remove some source code
+						// TODO
 					}
-					// if the dir is under assets, we need to rebuild all the assets or sprites
-					// else we take it as a go code directory
-					// TODO
 				}
-				// maybe remove some source code
-				// TODO
-			} else if event.Op&fsnotify.Write == fsnotify.Write {
-				if event.Name == "project.toml" {
-					pw.updateConfig()
-				}
-				if strings.HasSuffix(event.Name, ".go") {
-					goModule := path.Dir(event.Name)
-					if pw.hasGoTests(goModule) {
-						pw.addTask(kTaskBinaryTest, goModule)
-					}
-					pw.addTask(kTaskBuildBinary, goModule)
-				}
-				// js, css, file changes
-				// sprite images updated
 			}
 		case err := <-pw.watcher.Errors:
 			loggers.Error("Error: %v", err)

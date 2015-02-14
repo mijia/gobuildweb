@@ -175,6 +175,8 @@ func (app *AppShell) buildImages(entry string) error {
 		return app.buildAssetsTraverse(app.buildImages)
 	}
 
+	rootConfig.RLock()
+	defer rootConfig.RUnlock()
 	return assets.ImageLibrary(*rootConfig.Assets, entry).Build(app.isProduction)
 }
 
@@ -186,6 +188,8 @@ func (app *AppShell) buildStyles(entry string) error {
 		return app.buildAssetsTraverse(app.buildStyles)
 	}
 
+	rootConfig.RLock()
+	defer rootConfig.RUnlock()
 	return assets.StyleSheet(*rootConfig.Assets, entry).Build(app.isProduction)
 }
 
@@ -197,6 +201,8 @@ func (app *AppShell) buildJavaScripts(entry string) error {
 		return app.buildAssetsTraverse(app.buildJavaScripts)
 	}
 
+	rootConfig.RLock()
+	defer rootConfig.RUnlock()
 	return assets.JavaScript(*rootConfig.Assets, entry).Build(app.isProduction)
 }
 

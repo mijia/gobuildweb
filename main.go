@@ -23,12 +23,7 @@ type ProjectConfig struct {
 func (pc ProjectConfig) getAssetEntry(entryName string) (assets.Entry, bool) {
 	pc.RLock()
 	defer pc.RUnlock()
-	for _, entry := range append(pc.Assets.VendorSets, pc.Assets.Entries...) {
-		if entry.Name == entryName {
-			return entry, true
-		}
-	}
-	return assets.Entry{}, false
+	return assets.GetEntryConfig(*pc.Assets, entryName)
 }
 
 type PackageConfig struct {

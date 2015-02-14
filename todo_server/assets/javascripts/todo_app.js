@@ -1,1 +1,2 @@
-var React = require("react/addons")
+var React = require("react/addons");
+require("./todo_app/page")
