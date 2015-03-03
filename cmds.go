@@ -246,11 +246,30 @@ func (pw *ProjectWatcher) updateConfig() {
 	}
 }
 
+func (pw *ProjectWatcher) goModuleName(dir string) (string, error) {
+	if dir == "." {
+		return dir, nil
+	}
+	if absPath, err := filepath.Abs(dir); err != nil {
+		return "", err
+	} else {
+		goPath := os.Getenv("GOPATH")
+		if !strings.HasPrefix(absPath, goPath) {
+			return "", fmt.Errorf("Go module not in GOPATH[%s]", goPath)
+		}
+		return absPath[len(goPath)+len("/src/"):], nil
+	}
+}
+
 func (pw *ProjectWatcher) maybeGoCodeChanged(fname string) {
 	if strings.HasSuffix(fname, ".go") {
 		goModule := path.Dir(fname)
 		if pw.hasGoTests(goModule) {
-			pw.addTask(kTaskBinaryTest, goModule)
+			if moduleName, err := pw.goModuleName(goModule); err == nil {
+				pw.addTask(kTaskBinaryTest, moduleName)
+			} else {
+				loggers.Error("Cannot get go module path name, %v", err)
+			}
 		}
 		pw.addTask(kTaskBuildBinary, goModule)
 	}
