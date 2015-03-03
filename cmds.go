@@ -309,7 +309,7 @@ func (pw *ProjectWatcher) watchProject() {
 				strings.HasSuffix(event.Name, ".DS_Store") {
 				break
 			}
-			fmt.Println(event)
+			loggers.Debug("fsevents: %v", event)
 			if event.Op&fsnotify.Create == fsnotify.Create || event.Op&fsnotify.Write == fsnotify.Write {
 				if fi, err := os.Stat(event.Name); err == nil {
 					if fi.IsDir() {

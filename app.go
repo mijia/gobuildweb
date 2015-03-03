@@ -211,13 +211,13 @@ func (app *AppShell) binaryTest(module string) error {
 		module = "."
 	}
 	testCmd := exec.Command("go", "test", module)
-	loggers.Info("Testing Module[%s]: %v", module, testCmd.Args)
 	testCmd.Stderr = os.Stderr
 	testCmd.Stdout = os.Stdout
 	if err := testCmd.Run(); err != nil {
 		loggers.Error("Error when testing go modules[%s], %v", module, err)
 		return err
 	}
+	loggers.Succ("Module[%s] Test passed: %v", module, testCmd.Args)
 	return nil
 }
 
