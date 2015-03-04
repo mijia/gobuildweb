@@ -32,6 +32,7 @@ func (js _JavaScript) Build(isProduction bool) error {
 		if exist, err := js.checkFile(filename, true); !exist {
 			return err
 		}
+		isCoffee = true
 	}
 
 	// * Maybe it's a template using images, styles assets links
