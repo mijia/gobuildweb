@@ -55,7 +55,7 @@ func (js _JavaScript) Build(isProduction bool) error {
 	if isCoffee {
 		params = append(params, "--transform", "coffeeify")
 	} else {
-		params = append(params, "--transform", "6to5ify")
+		params = append(params, "--transform", "babelify")
 	}
 	params = append(params, "--transform", "envify")
 	if isProduction {

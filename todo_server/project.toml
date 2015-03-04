@@ -5,6 +5,7 @@ name = "todo_server"
 version = "0.1"
 authors = ["Todo Server Ltd."]
 build_opts = ["-race"]
+is_graceful = true
 deps = [
     "github.com/julienschmidt/httprouter"
 ]
@@ -29,6 +30,5 @@ deps = [
 [distribution]
 build_opts = []
 cross_targets = [
-    ["darwin", "amd64"],
     ["linux", "amd64"],
 ]

@@ -65,8 +65,16 @@ func (app *AppShell) Dist() error {
 	} else if err = app.binaryTest(""); err != nil {
 		loggers.Error("You have failed test cases, %v", err)
 	} else if err == nil {
-		for _, target := range rootConfig.Distribution.CrossTargets {
-			if err = app.buildBinary(target...); err != nil {
+		goOs, goArch := runtime.GOOS, runtime.GOARCH
+		targets := append(rootConfig.Distribution.CrossTargets, [2]string{goOs, goArch})
+		visited := make(map[string]struct{})
+		for _, target := range targets {
+			buildTarget := fmt.Sprintf("%s_%s", target[0], target[1])
+			if _, ok := visited[buildTarget]; ok {
+				continue
+			}
+			visited[buildTarget] = struct{}{}
+			if err = app.buildBinary(target[:]...); err != nil {
 				loggers.Error("Error when building binary for %v, %v", target, err)
 			}
 		}
@@ -122,11 +130,19 @@ func (app *AppShell) kill() error {
 		} else if err := app.command.Process.Signal(os.Interrupt); err != nil {
 			return err
 		}
-		//Wait for our process to die before we return or hard kill after 3 sec
-		select {
-		case <-time.After(3 * time.Second):
-			if err := app.command.Process.Kill(); err != nil {
-				loggers.Warn("failed to kill the app: %v", err)
+
+		rootConfig.RLock()
+		isGraceful := rootConfig.Package.IsGraceful
+		rootConfig.RUnlock()
+
+		if !isGraceful {
+			// Wait for our process to die before we return or hard kill after 3 sec
+			// when this is not a graceful server
+			select {
+			case <-time.After(3 * time.Second):
+				if err := app.command.Process.Kill(); err != nil {
+					loggers.Warn("failed to kill the app: %v", err)
+				}
 			}
 		}
 		app.command = nil

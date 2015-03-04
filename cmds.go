@@ -63,7 +63,7 @@ func updateAssetsDeps() error {
 	deps := make([]string, len(rootConfig.Assets.Dependencies), len(rootConfig.Assets.Dependencies)+1)
 	copy(deps, rootConfig.Assets.Dependencies)
 	// add all dev deps for xxxify
-	deps = append(deps, "browserify", "coffeeify", "envify", "uglifyify", "6to5ify", "nib", "stylus")
+	deps = append(deps, "browserify", "coffeeify", "envify", "uglifyify", "babelify", "nib", "stylus")
 	for _, dep := range deps {
 		checkParams[len(checkParams)-1] = dep
 		listCmd := exec.Command("npm", checkParams...)
@@ -206,9 +206,13 @@ func (pw *ProjectWatcher) hasGoTests(module string) bool {
 	}
 	rootConfig.RUnlock()
 	err := filepath.Walk(module, func(fname string, info os.FileInfo, err error) error {
-		if _, ok := ignoreTests[fname]; !ok && !info.IsDir() {
-			if strings.HasSuffix(fname, "_test.go") {
-				has = true
+		if _, ok := ignoreTests[fname]; !ok {
+			if !info.IsDir() {
+				if strings.HasSuffix(fname, "_test.go") {
+					has = true
+				}
+			} else {
+				return filepath.SkipDir
 			}
 		}
 		return nil

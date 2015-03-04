@@ -33,11 +33,12 @@ type PackageConfig struct {
 	Dependencies []string `toml:"deps"`
 	BuildOpts    []string `toml:"build_opts"`
 	OmitTests    []string `toml:"omit_tests"`
+	IsGraceful   bool     `toml:"is_graceful"`
 }
 
 type DistributionConfig struct {
-	BuildOpts    []string   `toml:"build_opts"`
-	CrossTargets [][]string `toml:"cross_targets"`
+	BuildOpts    []string    `toml:"build_opts"`
+	CrossTargets [][2]string `toml:"cross_targets"`
 }
 
 func usage() {
