@@ -67,5 +67,6 @@ func (il _ImageLibrary) buildSprites(entry string, isProduction bool) error {
 			return fmt.Errorf("[ImageLibrary][%s] Error when generating sprite, %v", il.entry, err)
 		}
 	}
+
 	return nil
 }

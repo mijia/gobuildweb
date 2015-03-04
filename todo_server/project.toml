@@ -12,6 +12,7 @@ deps = [
 
 [assets]
 url_prefix = "/assets"
+assets_mapping_pkg = "."
 image_exts = [".png", ".jpg", ".jpeg"]
 deps = [
     "react@0.12.2",

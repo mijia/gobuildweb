@@ -211,7 +211,7 @@ func (pw *ProjectWatcher) hasGoTests(module string) bool {
 				if strings.HasSuffix(fname, "_test.go") {
 					has = true
 				}
-			} else {
+			} else if fname != module {
 				return filepath.SkipDir
 			}
 		}
@@ -246,6 +246,7 @@ func (pw *ProjectWatcher) updateConfig() {
 		pw.addTask(kTaskBuildImages, "")
 		pw.addTask(kTaskBuildStyles, "")
 		pw.addTask(kTaskBuildJavaScripts, "")
+		pw.addTask(kTaskGenAssetsMapping, "")
 		pw.addTask(kTaskBuildBinary, "")
 	}
 }
@@ -299,6 +300,7 @@ func (pw *ProjectWatcher) maybeAssetsChanged(fname string) {
 				// we naively think this as a global change
 				pw.addTask(taskTypes[i], "")
 			}
+			pw.addTask(kTaskGenAssetsMapping, "")
 		}
 	}
 }

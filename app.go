@@ -18,6 +18,7 @@ const (
 	kTaskBuildImages TaskType = iota
 	kTaskBuildStyles
 	kTaskBuildJavaScripts
+	kTaskGenAssetsMapping
 	kTaskBinaryTest
 	kTaskBuildBinary
 	kTaskBinaryRestart
@@ -44,6 +45,7 @@ func (app *AppShell) Run() error {
 		AppShellTask{kTaskBuildImages, ""},
 		AppShellTask{kTaskBuildStyles, ""},
 		AppShellTask{kTaskBuildJavaScripts, ""},
+		AppShellTask{kTaskGenAssetsMapping, ""},
 		AppShellTask{kTaskBuildBinary, ""},
 	)
 	return nil
@@ -62,6 +64,8 @@ func (app *AppShell) Dist() error {
 		loggers.Error("Error when building stylesheets, %v", err)
 	} else if err = app.buildJavaScripts(""); err != nil {
 		loggers.Error("Error when building javascripts, %v", err)
+	} else if err = app.genAssetsMapping(); err != nil {
+		loggers.Error("Error when generating assets mapping source code, %v", err)
 	} else if err = app.binaryTest(""); err != nil {
 		loggers.Error("You have failed test cases, %v", err)
 	} else if err == nil {
@@ -92,6 +96,8 @@ func (app *AppShell) startRunner() {
 			app.curError = app.buildStyles(task.module)
 		case kTaskBuildJavaScripts:
 			app.curError = app.buildJavaScripts(task.module)
+		case kTaskGenAssetsMapping:
+			app.curError = app.genAssetsMapping()
 		case kTaskBinaryTest:
 			app.curError = app.binaryTest(task.module)
 		case kTaskBuildBinary:
@@ -220,6 +226,12 @@ func (app *AppShell) buildJavaScripts(entry string) error {
 	rootConfig.RLock()
 	defer rootConfig.RUnlock()
 	return assets.JavaScript(*rootConfig.Assets, entry).Build(app.isProduction)
+}
+
+func (app *AppShell) genAssetsMapping() error {
+	rootConfig.RLock()
+	defer rootConfig.RUnlock()
+	return assets.Mappings(*rootConfig.Assets).Build(app.isProduction)
 }
 
 func (app *AppShell) binaryTest(module string) error {

@@ -77,5 +77,6 @@ func (js _JavaScript) Build(isProduction bool) error {
 	// * generate the hash, clear old bundle, move to target
 	target = js.addFingerPrint("public/javascripts", js.entry+".js")
 	loggers.Succ("[JavaScript][%s] Saved assset: %s", js.entry, target)
+
 	return nil
 }

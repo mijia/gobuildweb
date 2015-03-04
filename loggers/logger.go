@@ -48,8 +48,8 @@ func Info(format string, args ...interface{}) {
 }
 
 func init() {
-	INFO = log.New(os.Stdout, "[INFO] ", 0)
-	SUCC = log.New(&ColoredLogger{gocolorize.NewColor("green"), os.Stdout}, "[SUCC] ", 0)
-	WARN = log.New(&ColoredLogger{gocolorize.NewColor("yellow"), os.Stdout}, "[WARN] ", 0)
-	ERROR = log.New(&ColoredLogger{gocolorize.NewColor("red"), os.Stdout}, "[ERROR] ", 0)
+	INFO = log.New(os.Stdout, "(gbw) [INFO] ", 0)
+	SUCC = log.New(&ColoredLogger{gocolorize.NewColor("green"), os.Stdout}, "(gbw) [SUCC] ", 0)
+	WARN = log.New(&ColoredLogger{gocolorize.NewColor("yellow"), os.Stdout}, "(gbw) [WARN] ", 0)
+	ERROR = log.New(&ColoredLogger{gocolorize.NewColor("red"), os.Stdout}, "(gbw) [ERROR] ", 0)
 }
