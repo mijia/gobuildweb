@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"text/template"
+	"sort"
 
 	"github.com/mijia/gobuildweb/loggers"
 )
@@ -52,7 +53,7 @@ func Mappings(config Config) _Mappings {
 func (m _Mappings) Build(isProduction bool) error {
 	pkgName := m.config.AssetsMappingPkg
 	targetPath := "assets_gen.go"
-	if pkgName == "" || pkgName == "." {
+	if pkgName == "" || pkgName == "." || pkgName == "main" {
 		pkgName = "main"
 	} else {
 		goPath := os.Getenv("GOPATH")
@@ -83,6 +84,8 @@ func (m _Mappings) Build(isProduction bool) error {
 	if err != nil {
 		return err
 	}
+
+	sort.Sort(mapping)
 
 	if file, err := os.Create(targetPath); err != nil {
 		return fmt.Errorf("Cannot create the assets mapping go file, %+v", err)

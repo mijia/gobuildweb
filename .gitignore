@@ -2,3 +2,9 @@
 gobuildweb
 node_modules
 todo_server-*
+todo_server/assets/stylesheets/sprites/
+todo_server/public/images/
+todo_server/public/stylesheets/
+todo_server/public/javascripts/
+todo_server/assets_gen.go
+
