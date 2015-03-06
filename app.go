@@ -298,7 +298,7 @@ func (app *AppShell) binaryTest(module string) error {
 	if module == "" {
 		module = "."
 	}
-	testCmd := exec.Command("go", "test", module)
+	testCmd := exec.Command("go", "test", "-v", module)
 	testCmd.Stderr = os.Stderr
 	testCmd.Stdout = os.Stdout
 	if err := testCmd.Run(); err != nil {
