@@ -19,9 +19,8 @@ Features:
     + Assets development and production mode via envyify (NODE_ENV)
     + Assets uglify and minimization
     + Assets fingerprints and will auto generate an assets mapping go code file in assets_gen.go
-+ Cross Compilation
-    + We need to switch on the cross compilation mode for go
-    + For this, please refer to https://github.com/davecheney/golang-crosscompile
++ Distribution packing and cross compilation
+    + For cross compilation in go1.4, please refer to https://github.com/davecheney/golang-crosscompile
 
 Cmds
 -----
