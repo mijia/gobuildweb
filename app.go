@@ -347,11 +347,13 @@ func (app *AppShell) buildBinary(params ...string) error {
 	flags = append(flags, buildOpts...)
 	flags = append(flags, []string{"-o", binName}...)
 	buildCmd := exec.Command("go", flags...)
+	buildCmd.Stderr = os.Stderr
+	buildCmd.Stdout = os.Stdout
 	buildCmd.Env = env
 	loggers.Debug("Running build: %v", buildCmd.Args)
 	start := time.Now()
-	if output, err := buildCmd.CombinedOutput(); err != nil {
-		loggers.Error("Building failed: %s", string(output))
+	if err := buildCmd.Run(); err != nil {
+		loggers.Error("Building failed")
 		return err
 	}
 	app.binName = binName
