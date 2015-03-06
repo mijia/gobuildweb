@@ -1,4 +1,5 @@
 .DS_Store
+*.swp
 gobuildweb
 node_modules
 todo_server-*

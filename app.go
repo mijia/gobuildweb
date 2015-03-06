@@ -1,9 +1,13 @@
 package main
 
 import (
+	"archive/zip"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"path"
+	"path/filepath"
 	"runtime"
 	"time"
 
@@ -83,8 +87,62 @@ func (app *AppShell) Dist() error {
 			}
 		}
 	}
-	// TODO package all the binary and static assets
-	return err
+	return app.buildPackage()
+}
+
+func (app *AppShell) buildPackage() error {
+	name, version := rootConfig.Package.Name, rootConfig.Package.Version
+	pkgName := fmt.Sprintf("%s-%s", name, version)
+	srcFolders := append([]string{"public"}, rootConfig.Distribution.PackExtras...)
+
+	goOs, goArch := runtime.GOOS, runtime.GOARCH
+	targets := append(rootConfig.Distribution.CrossTargets, [2]string{goOs, goArch})
+	visited := make(map[string]struct{})
+	for _, target := range targets {
+		buildTarget := fmt.Sprintf("%s_%s", target[0], target[1])
+		if _, ok := visited[buildTarget]; ok {
+			continue
+		}
+		visited[buildTarget] = struct{}{}
+		srcFolders = append(srcFolders, app.binaryName(name, version, target[0], target[1]))
+	}
+
+	if zipFile, err := os.Create(pkgName + ".zip"); err != nil {
+		return fmt.Errorf("Cannot create the zip file[%q], %v", pkgName, err)
+	} else {
+		defer zipFile.Close()
+		zw := zip.NewWriter(zipFile)
+		defer zw.Close()
+		for _, srcFolder := range srcFolders {
+			err := filepath.Walk(srcFolder, func(fn string, info os.FileInfo, err error) error {
+				if err == nil && !info.IsDir() {
+					zipSrcName := path.Join(pkgName, fn)
+					fileHeader, err := zip.FileInfoHeader(info)
+					if err != nil {
+						return err
+					}
+					fileHeader.Name = zipSrcName
+					zipSrcFile, err := zw.CreateHeader(fileHeader)
+					if err != nil {
+						return err
+					}
+					srcFile, err := os.Open(fn)
+					if err != nil {
+						return err
+					}
+					io.Copy(zipSrcFile, srcFile)
+					srcFile.Close()
+					loggers.Info("Archiving %s", zipSrcName)
+				}
+				return nil
+			})
+			if err != nil {
+				return fmt.Errorf("Cannot walk the files when creating the zip file, %v", err)
+			}
+		}
+	}
+
+	return nil
 }
 
 func (app *AppShell) startRunner() {
@@ -249,6 +307,14 @@ func (app *AppShell) binaryTest(module string) error {
 	return nil
 }
 
+func (app *AppShell) binaryName(name, version, goOs, goArch string) string {
+	binName := fmt.Sprintf("%s-%s.%s.%s", name, version, goOs, goArch)
+	if goOs == "windows" {
+		binName += ".exe"
+	}
+	return binName
+}
+
 func (app *AppShell) buildBinary(params ...string) error {
 	goOs, goArch := runtime.GOOS, runtime.GOARCH
 	if len(params) == 2 && (goOs != params[0] || goArch != params[1]) {
@@ -256,9 +322,7 @@ func (app *AppShell) buildBinary(params ...string) error {
 	}
 
 	rootConfig.RLock()
-	binName := fmt.Sprintf("%s-%s.%s.%s",
-		rootConfig.Package.Name, rootConfig.Package.Version,
-		goOs, goArch)
+	binName := app.binaryName(rootConfig.Package.Name, rootConfig.Package.Version, goOs, goArch)
 	var buildOpts []string
 	if app.isProduction {
 		buildOpts = make([]string, len(rootConfig.Distribution.BuildOpts))
@@ -274,9 +338,6 @@ func (app *AppShell) buildBinary(params ...string) error {
 		fmt.Sprintf("GOOS=%s", goOs),
 		fmt.Sprintf("GOARCH=%s", goArch),
 		fmt.Sprintf("GOPATH=%s", os.Getenv("GOPATH")),
-	}
-	if goOs == "windows" {
-		binName += ".exe"
 	}
 
 	flags := make([]string, 0, 3+len(buildOpts))

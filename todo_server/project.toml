@@ -30,6 +30,7 @@ deps = [
 
 [distribution]
 build_opts = []
+pack_extras = ["project.toml"]
 cross_targets = [
     ["linux", "amd64"],
 ]
