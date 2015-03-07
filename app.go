@@ -132,7 +132,7 @@ func (app *AppShell) buildPackage() error {
 					}
 					io.Copy(zipSrcFile, srcFile)
 					srcFile.Close()
-					loggers.Info("Archiving %s", zipSrcName)
+					loggers.Debug("Archiving %s", zipSrcName)
 				}
 				return nil
 			})
