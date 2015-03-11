@@ -145,7 +145,6 @@ func (app *AppShell) buildPackage() error {
 		}
 	}
 
-	fmt.Println()
 	loggers.Succ("Finish packing the deploy package in %s.zip", pkgName)
 	return nil
 }
