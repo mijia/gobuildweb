@@ -86,7 +86,8 @@ func (app *AppShell) Dist() error {
 				loggers.Error("Error when building binary for %v, %v", target, err)
 			}
 		}
-	} else if err == nil {
+	}
+	if err == nil {
 		err = app.buildPackage()
 	}
 	return err
