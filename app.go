@@ -252,6 +252,13 @@ func (app *AppShell) buildAssetsTraverse(functor func(entry string) error) error
 }
 
 func (app *AppShell) buildImages(entry string) error {
+	rootConfig.RLock()
+	if rootConfig.Assets == nil {
+		rootConfig.RUnlock()
+		return nil
+	}
+	rootConfig.RUnlock()
+
 	if entry == "" {
 		if err := assets.ResetDir("public/images", true); err != nil {
 			return err
@@ -265,6 +272,13 @@ func (app *AppShell) buildImages(entry string) error {
 }
 
 func (app *AppShell) buildStyles(entry string) error {
+	rootConfig.RLock()
+	if rootConfig.Assets == nil {
+		rootConfig.RUnlock()
+		return nil
+	}
+	rootConfig.RUnlock()
+
 	if entry == "" {
 		if err := assets.ResetDir("public/stylesheets", true); err != nil {
 			return err
@@ -278,6 +292,13 @@ func (app *AppShell) buildStyles(entry string) error {
 }
 
 func (app *AppShell) buildJavaScripts(entry string) error {
+	rootConfig.RLock()
+	if rootConfig.Assets == nil {
+		rootConfig.RUnlock()
+		return nil
+	}
+	rootConfig.RUnlock()
+
 	if entry == "" {
 		if err := assets.ResetDir("public/javascripts", true); err != nil {
 			return err
@@ -293,12 +314,15 @@ func (app *AppShell) buildJavaScripts(entry string) error {
 func (app *AppShell) genAssetsMapping() error {
 	rootConfig.RLock()
 	defer rootConfig.RUnlock()
+	if rootConfig.Assets == nil {
+		return nil
+	}
 	return assets.Mappings(*rootConfig.Assets).Build(app.isProduction)
 }
 
 func (app *AppShell) binaryTest(module string) error {
 	if module == "" {
-		module = "."
+		module = "./..."
 	}
 	testCmd := exec.Command("go", "test", "-v", module)
 	testCmd.Stderr = os.Stderr
