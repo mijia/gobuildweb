@@ -312,6 +312,7 @@ func (pw *ProjectWatcher) watchProject() {
 		case event := <-pw.watcher.Events:
 			if event.Name == "" ||
 				pw.isIgnoredDir(event.Name) ||
+				strings.HasSuffix(event.Name, ".swp") ||
 				strings.HasSuffix(event.Name, ".DS_Store") {
 				break
 			}
