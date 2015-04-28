@@ -117,8 +117,8 @@ func (s _Sprite) save(spriteImg image.Image, items []_ImageItem, fullWidth, full
 				Name:    s.name,
 				Url:     fmt.Sprintf("%s/images/%s/%s", s.config.UrlPrefix, s.entry, filepath.Base(target)),
 				Sprites: make([]SpriteImage, len(items)),
-				Width:   fullWidth,
-				Height:  fullHeight,
+				Width:   fullWidth / s.pixelRatio,
+				Height:  fullHeight / s.pixelRatio,
 			}
 			lastHeight := 0
 			for i, image := range items {
