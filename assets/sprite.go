@@ -83,12 +83,12 @@ func (s _Sprite) Build(isProduction bool) error {
 			draw.Draw(spriteImage, newBounds, images[i], image.Point{0, 0}, draw.Src)
 			yOffset += images[i].Bounds().Dy()
 		}
-		return s.save(spriteImage, images)
+		return s.save(spriteImage, images, width, height)
 	}
 	return nil
 }
 
-func (s _Sprite) save(spriteImg image.Image, items []_ImageItem) error {
+func (s _Sprite) save(spriteImg image.Image, items []_ImageItem, fullWidth, fullHeight int) error {
 	targetFolder := fmt.Sprintf("public/images/%s", s.entry)
 	target := path.Join(targetFolder, s.name+".png")
 	if file, err := os.Create(target); err != nil {
@@ -117,6 +117,8 @@ func (s _Sprite) save(spriteImg image.Image, items []_ImageItem) error {
 				Name:    s.name,
 				Url:     fmt.Sprintf("%s/images/%s/%s", s.config.UrlPrefix, s.entry, filepath.Base(target)),
 				Sprites: make([]SpriteImage, len(items)),
+				Width:   fullWidth,
+				Height:  fullHeight,
 			}
 			lastHeight := 0
 			for i, image := range items {
@@ -149,6 +151,8 @@ type SpriteEntry struct {
 	Name    string
 	Url     string
 	Sprites []SpriteImage
+	Width   int
+	Height  int
 }
 
 type SpriteImage struct {
@@ -165,6 +169,7 @@ var tmplSprites = `{{$EntryName := .Entry }}
 {{.Entry}}-{{.Name}}($sprite)
   background-image url("{{.Url}}")
   background-position $sprite[0] $sprite[1]
+  background-size {{.Width}}px {{.Height}}px
   width $sprite[2]
   height $sprite[3]
 `
