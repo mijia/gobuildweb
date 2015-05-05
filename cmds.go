@@ -67,6 +67,7 @@ func updateAssetsDeps() error {
 	for _, dep := range deps {
 		checkParams[len(checkParams)-1] = dep
 		listCmd := exec.Command("npm", checkParams...)
+		listCmd.Env = mergeEnv(nil)
 		if err := listCmd.Run(); err == nil {
 			// the module has been installed
 			loggers.Info("Checked npm module: %v", dep)
@@ -78,6 +79,7 @@ func updateAssetsDeps() error {
 		installCmd := exec.Command("npm", params...)
 		installCmd.Stdout = os.Stdout
 		installCmd.Stderr = os.Stderr
+		installCmd.Env = mergeEnv(nil)
 		if err := installCmd.Run(); err != nil {
 			loggers.Error("Error when run npm install: npm %v, %v", params, err)
 			return err
@@ -104,6 +106,7 @@ func updateGolangDeps() error {
 		getCmd := exec.Command("go", params...)
 		getCmd.Stdout = os.Stdout
 		getCmd.Stderr = os.Stderr
+		getCmd.Env = mergeEnv(nil)
 		if err := getCmd.Run(); err != nil {
 			loggers.Error("Error when run go get: go %v, %v", params, err)
 			return err

@@ -222,6 +222,7 @@ func (app *AppShell) start() error {
 	app.command = exec.Command("./"+app.binName, app.args...)
 	app.command.Stdout = os.Stdout
 	app.command.Stderr = os.Stderr
+	app.command.Env = mergeEnv(nil)
 
 	if err := app.command.Start(); err != nil {
 		return err
@@ -327,6 +328,7 @@ func (app *AppShell) binaryTest(module string) error {
 	testCmd := exec.Command("go", "test", "-v", module)
 	testCmd.Stderr = os.Stderr
 	testCmd.Stdout = os.Stdout
+	testCmd.Env = mergeEnv(nil)
 	if err := testCmd.Run(); err != nil {
 		loggers.Error("Error when testing go modules[%s], %v", module, err)
 		return err
@@ -361,13 +363,6 @@ func (app *AppShell) buildBinary(params ...string) error {
 	}
 	rootConfig.RUnlock()
 
-	env := []string{
-		fmt.Sprintf("PATH=%s", os.Getenv("PATH")),
-		fmt.Sprintf("GOOS=%s", goOs),
-		fmt.Sprintf("GOARCH=%s", goArch),
-		fmt.Sprintf("GOPATH=%s", os.Getenv("GOPATH")),
-	}
-
 	flags := make([]string, 0, 3+len(buildOpts))
 	flags = append(flags, "build")
 	flags = append(flags, buildOpts...)
@@ -375,7 +370,10 @@ func (app *AppShell) buildBinary(params ...string) error {
 	buildCmd := exec.Command("go", flags...)
 	buildCmd.Stderr = os.Stderr
 	buildCmd.Stdout = os.Stdout
-	buildCmd.Env = env
+	buildCmd.Env = mergeEnv(map[string]string{
+		"GOOS":   goOs,
+		"GOARCH": goArch,
+	})
 	loggers.Debug("Running build: %v", buildCmd.Args)
 	start := time.Now()
 	if err := buildCmd.Run(); err != nil {
