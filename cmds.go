@@ -251,6 +251,7 @@ func (pw *ProjectWatcher) updateConfig() {
 		pw.addTask(kTaskBuildJavaScripts, "")
 		pw.addTask(kTaskGenAssetsMapping, "")
 		pw.addTask(kTaskBuildBinary, "")
+		pw.addTask(kTaskBinaryRestart, "")
 	}
 }
 
@@ -280,6 +281,7 @@ func (pw *ProjectWatcher) maybeGoCodeChanged(fname string) {
 			}
 		}
 		pw.addTask(kTaskBuildBinary, goModule)
+		pw.addTask(kTaskBinaryRestart, "")
 	}
 }
 

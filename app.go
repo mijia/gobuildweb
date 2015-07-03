@@ -186,7 +186,7 @@ func (app *AppShell) executeTask(tasks ...AppShellTask) {
 	for _, task := range tasks {
 		app.taskChan <- task
 	}
-	app.taskChan <- AppShellTask{kTaskBinaryRestart, ""}
+	//app.taskChan <- AppShellTask{kTaskBinaryRestart, ""}
 }
 
 func (app *AppShell) kill() error {
