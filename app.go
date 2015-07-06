@@ -51,6 +51,7 @@ func (app *AppShell) Run() error {
 		AppShellTask{kTaskBuildJavaScripts, ""},
 		AppShellTask{kTaskGenAssetsMapping, ""},
 		AppShellTask{kTaskBuildBinary, ""},
+		AppShellTask{kTaskBinaryRestart, ""},
 	)
 	return nil
 }
