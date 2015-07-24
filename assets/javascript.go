@@ -19,6 +19,10 @@ func JavaScript(config Config, entry string) _JavaScript {
 }
 
 func (js _JavaScript) Build(isProduction bool) error {
+	if os.Getenv("NODE_ENV") == "production" {
+		isProduction = true
+	}
+
 	assetEntry, ok := js.config.getAssetEntry(js.entry)
 	if !ok {
 		return nil
