@@ -40,6 +40,7 @@ type DistributionConfig struct {
 	BuildOpts    []string    `toml:"build_opts"`
 	PackExtras   []string    `toml:"pack_extras"`
 	CrossTargets [][2]string `toml:"cross_targets"`
+	ExtraCmd     []string    `toml:"extra_cmd"`
 }
 
 func usage() {

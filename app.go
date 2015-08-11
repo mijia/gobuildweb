@@ -73,6 +73,8 @@ func (app *AppShell) Dist() error {
 		loggers.Error("Error when generating assets mapping source code, %v", err)
 	} else if err = app.binaryTest(""); err != nil {
 		loggers.Error("You have failed test cases, %v", err)
+	} else if err = app.distExtraCommand(); err != nil {
+		loggers.Error("Error when running the distribution extra command, %v", err)
 	} else if err == nil {
 		goOs, goArch := runtime.GOOS, runtime.GOARCH
 		targets := append(rootConfig.Distribution.CrossTargets, [2]string{goOs, goArch})
@@ -92,6 +94,22 @@ func (app *AppShell) Dist() error {
 		err = app.buildPackage()
 	}
 	return err
+}
+
+func (app *AppShell) distExtraCommand() error {
+	extraCmd := rootConfig.Distribution.ExtraCmd
+	if extraCmd == nil || len(extraCmd) == 0 {
+		return nil
+	}
+	cmd := exec.Command(extraCmd[0], extraCmd[1:]...)
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stdout
+	if err := cmd.Run(); err != nil {
+		loggers.Error("Error when running distribution extra command, %v, %s", extraCmd, err)
+		return err
+	}
+	loggers.Succ("Run extra command succ: %v", cmd.Args)
+	return nil
 }
 
 func (app *AppShell) buildPackage() error {
