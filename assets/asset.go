@@ -98,8 +98,8 @@ func (a _Asset) removeOldFile(dir, suffix string) error {
 	return filepath.Walk(dir, func(fn string, info os.FileInfo, err error) error {
 		if err == nil && !info.IsDir() && strings.HasSuffix(fn, suffix) {
 			filename := info.Name()
-			// FIXME: maybe we should be serious about checking this
-			if strings.HasPrefix(filename, "fp") && strings.HasSuffix(filename, "-"+suffix) {
+			parts := strings.SplitN(filename, "-", 2)
+			if len(parts) == 2 && strings.HasPrefix(parts[0], "fp") && parts[1] == suffix {
 				os.Remove(fn)
 			}
 		}
