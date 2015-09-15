@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-
+	"runtime"
+	"path"
 	"github.com/mijia/gobuildweb/loggers"
 )
 
@@ -43,6 +44,8 @@ func (css _StyleSheet) Build(isProduction bool) error {
 		} else {
 			params = append(params, "--sourcemap-inline")
 		}
+		// add asset plugin to change original file path to the finger printed one
+		params = append(params, "--use", getStylusPluginPath())
 		cmd := exec.Command("./node_modules/stylus/bin/stylus", params...)
 		loggers.Debug("[CSS][%s] Building asset: %s, %v", css.entry, filename, cmd.Args)
 		cmd.Stderr = os.Stderr
@@ -62,4 +65,10 @@ func (css _StyleSheet) Build(isProduction bool) error {
 	loggers.Succ("[CSS][%s] Saved assset: %s", css.entry, target)
 
 	return nil
+}
+
+
+func getStylusPluginPath() string{
+	_, file, _, _ := runtime.Caller(0)
+	return path.Join(path.Dir(file), "stylus-assets.js")
 }
