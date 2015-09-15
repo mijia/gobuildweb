@@ -62,7 +62,8 @@ function assets(file){
  * @returns {stylus.nodes.liter}
  */
 function images(file){
-    console.log(path.join('images/', file.val));
+    //console.log(path.join('images/', file.val));
+    
     // 这里传入一个假的{val},结构, 兼容默认的字符串节点接口
     // call on a fack {val} stuct for `assets` use it as a real string Node
     return assets({
