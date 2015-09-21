@@ -78,8 +78,7 @@ func (d _GoPkgMappingDumper) Dump(mapping *AssetsMapping) error {
 	if pkgName == "" || pkgName == "." || pkgName == "main" {
 		pkgName = "main"
 	} else {
-		goPath := os.Getenv("GOPATH")
-		targetPath = path.Join(goPath, "src", pkgName, "assets_gen.go")
+		targetPath = "./web/assets_gen.go"
 		pkgName = path.Base(pkgName)
 	}
 	mapping.PkgName = pkgName
