@@ -47,6 +47,7 @@ func (app *AppShell) Run() error {
 	go app.startRunner()
 	app.executeTask(
 		AppShellTask{kTaskBuildImages, ""},
+		AppShellTask{kTaskGenAssetsMapping, ""},
 		AppShellTask{kTaskBuildStyles, ""},
 		AppShellTask{kTaskBuildJavaScripts, ""},
 		AppShellTask{kTaskGenAssetsMapping, ""},
@@ -65,6 +66,8 @@ func (app *AppShell) Dist() error {
 	var err error
 	if err = app.buildImages(""); err != nil {
 		loggers.Error("Error when building images, %v", err)
+	} else if err = app.genAssetsMapping(); err != nil {
+		loggers.Error("Error when generating assets mapping source code, %v", err)
 	} else if err = app.buildStyles(""); err != nil {
 		loggers.Error("Error when building stylesheets, %v", err)
 	} else if err = app.buildJavaScripts(""); err != nil {
