@@ -14,6 +14,7 @@ import (
 type Config struct {
 	UrlPrefix         string   `toml:"url_prefix"`
 	AssetsMappingPkg  string   `toml:"assets_mapping_pkg"`
+	AssetsMappingPkgRelative  string   `toml:"assets_mapping_pkg_relative"`
 	AssetsMappingJson string   `toml:"assets_mapping_json"`
 	ImageExts         []string `toml:"image_exts"`
 	Dependencies      []string `toml:"deps"`
