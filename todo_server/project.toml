@@ -12,7 +12,7 @@ deps = [
 
 [assets]
 url_prefix = "/assets"
-assets_mapping_json = "assets_map.json"
+#assets_mapping_json = "assets_map.json"
 assets_mapping_pkg = "main"
 image_exts = [".png", ".jpg", ".jpeg"]
 deps = [
