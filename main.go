@@ -31,6 +31,7 @@ type PackageConfig struct {
 	Version      string
 	Authors      []string
 	Dependencies []string `toml:"deps"`
+	Builder      string   `toml:builder`
 	BuildOpts    []string `toml:"build_opts"`
 	OmitTests    []string `toml:"omit_tests"`
 	IsGraceful   bool     `toml:"is_graceful"`

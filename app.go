@@ -348,7 +348,15 @@ func (app *AppShell) binaryTest(module string) error {
 	if module == "" {
 		module = "./..."
 	}
-	testCmd := exec.Command("go", "test", "-v", module)
+	builder := rootConfig.Package.Builder
+	cmdName := "go"
+	flags := make([]string, 0)
+	if builder != "" {
+		cmdName = builder
+		flags = append(flags, "go")
+	}
+	flags = append(flags, "test", "-v", module)
+	testCmd := exec.Command(cmdName, flags...)
 	testCmd.Stderr = os.Stderr
 	testCmd.Stdout = os.Stdout
 	testCmd.Env = mergeEnv(nil)
@@ -375,6 +383,7 @@ func (app *AppShell) buildBinary(params ...string) error {
 	}
 
 	rootConfig.RLock()
+	builder := rootConfig.Package.Builder
 	binName := app.binaryName(rootConfig.Package.Name, rootConfig.Package.Version, goOs, goArch)
 	var buildOpts []string
 	if app.isProduction {
@@ -386,11 +395,16 @@ func (app *AppShell) buildBinary(params ...string) error {
 	}
 	rootConfig.RUnlock()
 
+	cmdName := "go"
 	flags := make([]string, 0, 3+len(buildOpts))
+	if builder != "" {
+		flags = append(flags, "go")
+		cmdName = builder
+	}
 	flags = append(flags, "build")
 	flags = append(flags, buildOpts...)
 	flags = append(flags, []string{"-o", binName}...)
-	buildCmd := exec.Command("go", flags...)
+	buildCmd := exec.Command(cmdName, flags...)
 	buildCmd.Stderr = os.Stderr
 	buildCmd.Stdout = os.Stdout
 	buildCmd.Env = mergeEnv(map[string]string{
