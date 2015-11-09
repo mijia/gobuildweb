@@ -63,7 +63,7 @@ func updateAssetsDeps() error {
 	deps := make([]string, len(rootConfig.Assets.Dependencies), len(rootConfig.Assets.Dependencies)+1)
 	copy(deps, rootConfig.Assets.Dependencies)
 	// add all dev deps for xxxify
-	deps = append(deps, "browserify", "coffeeify", "envify", "uglifyify", "babelify", "nib", "stylus")
+	deps = append(deps, "browserify", "coffeeify", "envify", "uglifyify", "babelify", "babel-preset-es2015", "babel-preset-react", "nib", "stylus")
 	for _, dep := range deps {
 		checkParams[len(checkParams)-1] = dep
 		listCmd := exec.Command("npm", checkParams...)
