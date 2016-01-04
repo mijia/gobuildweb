@@ -45,6 +45,7 @@ func (css _StyleSheet) Build(isProduction bool) error {
 		} else {
 			params = append(params, "--sourcemap-inline")
 		}
+		params = append(params, "--include-css")
 		// add asset plugin to change original file path to the finger printed one
 		if css.config.AssetsMappingJson != "" {
 			params = append(params, "--use", getStylusPluginPath())
