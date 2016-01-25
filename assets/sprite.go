@@ -166,15 +166,27 @@ type SpriteImage struct {
 var tmplSprites = `{{$EntryName := .Entry }}
 {{range .Sprites}}${{$EntryName}}-{{.Name}} = {{.X}}px {{.Y}}px {{.Width}}px {{.Height}}px
 {{end}}
+{{range .Sprites}}${{$EntryName}}-2rem-{{.Name}} = {{px2rem .X}}rem {{px2rem .Y}}rem {{px2rem .Width}}rem {{px2rem .Height}}rem
+{{end}}
 {{.Entry}}-{{.Name}}($sprite)
   background-image url("{{.Url}}")
   background-position $sprite[0] $sprite[1]
   background-size {{.Width}}px {{.Height}}px
   width $sprite[2]
   height $sprite[3]
+
+{{.Entry}}-2rem-{{.Name}}($sprite)
+  background-image url("{{.Url}}")
+  background-position $sprite[0] $sprite[1]
+  background-size {{px2rem .Width}}rem {{px2rem .Height}}rem
+  width $sprite[2]
+  height $sprite[3]
 `
 var tmSprites *template.Template
 
 func init() {
-	tmSprites = template.Must(template.New("sprites").Parse(tmplSprites))
+	fm := template.FuncMap{"px2rem": func(a int) string {
+		return fmt.Sprintf("%.2f", float64(a)/100.00)
+	}}
+	tmSprites = template.Must(template.New("sprites").Funcs(fm).Parse(tmplSprites))
 }
