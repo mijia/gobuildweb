@@ -67,7 +67,7 @@ func (s _Sprite) Build(isProduction bool) error {
 				} else {
 					files[i] = file
 					images[i] = _ImageItem{imgItem, image}
-					height += image.Bounds().Dy()
+					height += image.Bounds().Dy() + s.pixelRatio
 					if width < image.Bounds().Dx() {
 						width = image.Bounds().Dx()
 					}
@@ -81,7 +81,7 @@ func (s _Sprite) Build(isProduction bool) error {
 			files[i].Close()
 			newBounds := image.Rect(0, yOffset, images[i].Bounds().Dx(), yOffset+images[i].Bounds().Dy())
 			draw.Draw(spriteImage, newBounds, images[i], image.Point{0, 0}, draw.Src)
-			yOffset += images[i].Bounds().Dy()
+			yOffset += images[i].Bounds().Dy() + s.pixelRatio
 		}
 		return s.save(spriteImage, images, width, height)
 	}
@@ -136,7 +136,7 @@ func (s _Sprite) save(spriteImg image.Image, items []_ImageItem, fullWidth, full
 					Width:  width / s.pixelRatio,
 					Height: height / s.pixelRatio,
 				}
-				lastHeight += height / s.pixelRatio
+				lastHeight += (height + s.pixelRatio) / s.pixelRatio
 			}
 			if err := tmSprites.Execute(stylusFile, spriteEntry); err != nil {
 				return fmt.Errorf("Cannot generate stylus for sprites %s, %v", spriteEntry, err)
@@ -164,23 +164,21 @@ type SpriteImage struct {
 }
 
 var tmplSprites = `{{$EntryName := .Entry }}
-{{range .Sprites}}${{$EntryName}}-{{.Name}} = {{.X}}px {{.Y}}px {{.Width}}px {{.Height}}px
-{{end}}
-{{range .Sprites}}${{$EntryName}}-2rem-{{.Name}} = {{px2rem .X}}rem {{px2rem .Y}}rem {{px2rem .Width}}rem {{px2rem .Height}}rem
+{{range .Sprites}}${{$EntryName}}-{{.Name}} = {{.X}} {{.Y}} {{.Width}} {{.Height}}
 {{end}}
 {{.Entry}}-{{.Name}}($sprite)
   background-image url("{{.Url}}")
-  background-position $sprite[0] $sprite[1]
+  background-position unit($sprite[0], px) unit($sprite[1], px)
   background-size {{.Width}}px {{.Height}}px
-  width $sprite[2]
-  height $sprite[3]
+  width unit($sprite[2], px)
+  height unit($sprite[3], px)
 
 {{.Entry}}-2rem-{{.Name}}($sprite)
   background-image url("{{.Url}}")
-  background-position $sprite[0] $sprite[1]
+  background-position unit($sprite[0]/100, rem) unit($sprite[1]/100, rem)
   background-size {{px2rem .Width}}rem {{px2rem .Height}}rem
-  width $sprite[2]
-  height $sprite[3]
+  width unit($sprite[2]/100, rem)
+  height unit($sprite[3]/100, rem)
 `
 var tmSprites *template.Template
 
