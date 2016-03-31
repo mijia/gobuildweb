@@ -8,4 +8,5 @@ todo_server/public/images/
 todo_server/public/stylesheets/
 todo_server/public/javascripts/
 todo_server/assets_gen.go
+.idea
 

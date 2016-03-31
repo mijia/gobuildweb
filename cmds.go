@@ -88,6 +88,31 @@ func updateAssetsDeps() error {
 	loggers.Succ("Loaded assets dependencies: \n\t%v", strings.Join(deps, "\n\t"))
 	return nil
 }
+//是否已经下载了go运行所需要的包,是否可以编译成功
+func hasGetColangDeps() bool {
+	cmd := exec.Command("go", "build")
+	loggers.Info("Started to go build...")
+	err := cmd.Start()
+	if err != nil {
+		loggers.Error("Failed to go build... %+v", err)
+		return false
+	}
+	done := make(chan error, 1)
+	go func() {
+		done <- cmd.Wait()
+	}()
+	err = <-done
+	if err != nil {
+		loggers.Error("Failed to go build...%+v", err)
+	} else {
+		loggers.Info("Successed to go build...")
+		cmd := exec.Command("rm", "zhiwang_web")
+		cmd.Run()
+		return true
+	}
+
+	return false
+}
 
 func updateGolangDeps() error {
 	rootConfig.RLock()
@@ -99,6 +124,10 @@ func updateGolangDeps() error {
 
 	fmt.Println()
 	loggers.Info("Start to loading Go dependencies...")
+	if hasGetColangDeps() {
+		loggers.Info("Has Loaded Go package dependencies")
+		return nil
+	}
 	params := []string{"get", ""}
 	for _, dep := range rootConfig.Package.Dependencies {
 		params[len(params)-1] = dep
