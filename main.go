@@ -11,6 +11,7 @@ import (
 	"github.com/agtorre/gocolorize"
 	"github.com/mijia/gobuildweb/assets"
 	"github.com/mijia/gobuildweb/loggers"
+	"strings"
 )
 
 type ProjectConfig struct {
@@ -48,7 +49,29 @@ func usage() {
 	fmt.Println("Usage:")
 	fmt.Println("  run       Will watch your file changes and run the application")
 	fmt.Println("  dist      Build your web application")
+	fmt.Println("  -specified-entries entry1,entry2 run -debug  Will watch your file changes and run the application, just compile the specified entry")
 	os.Exit(1)
+}
+
+//传入参数specified-entries,用逗号分隔
+func getAvailableEntries(specifiedEntries string, entries []assets.Entry) []assets.Entry {
+	var availableEntries []assets.Entry
+	specifiedEntries = strings.TrimSpace(specifiedEntries)
+	if len(specifiedEntries) == 0 {
+		return entries
+	}
+	specifiedEntryList := strings.Split(specifiedEntries, ",")
+	specifiedEntryMap := map[string]bool{}
+	for _, specifiedEntry := range specifiedEntryList {
+		specifiedEntryMap[specifiedEntry] = true
+	}
+	for _, entry := range entries {
+		if _, ok := specifiedEntryMap[entry.Name]; ok {
+			availableEntries = append(availableEntries, entry)
+			loggers.Info("the available entry is %+v", entry)
+		}
+	}
+	return availableEntries
 }
 
 func main() {
@@ -59,6 +82,7 @@ func main() {
 		"run":  commandRun,
 		"dist": commandDist,
 	}
+	specifiedEntries := flag.String("specified-entries", "", "the specified entries name,用逗号分隔")
 	flag.Parse()
 	args := flag.Args()
 	if len(args) == 0 {
@@ -77,6 +101,11 @@ func main() {
 
 		if _, err := toml.DecodeFile("project.toml", &rootConfig); err != nil {
 			loggers.ERROR.Fatalf("Cannot decode the project.toml into TOML format, %v", err)
+		}
+
+		if len(*specifiedEntries) > 0 && rootConfig.Assets != nil {
+			availableEntries := getAvailableEntries(*specifiedEntries, rootConfig.Assets.Entries)
+			rootConfig.Assets.Entries = availableEntries
 		}
 		loggers.SUCC.Printf("Loaded project.toml... %s", rootConfig.Package.Name)
 		if err := cmd(args[1:]); err != nil {
