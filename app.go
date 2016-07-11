@@ -23,6 +23,7 @@ const (
 	// The Order is important
 	kTaskBuildImages TaskType = iota
 	kTaskBuildStyles
+	kTaskClearJavaScripts
 	kTaskBuildJavaScripts
 	kTaskGenAssetsMapping
 	kTaskBinaryTest
@@ -51,6 +52,7 @@ func (app *AppShell) Run() error {
 		AppShellTask{kTaskBuildImages, ""},
 		AppShellTask{kTaskGenAssetsMapping, ""},
 		AppShellTask{kTaskBuildStyles, ""},
+		AppShellTask{kTaskClearJavaScripts, ""},
 		AppShellTask{kTaskBuildJavaScripts, APP_SHELL_JS_TASK_INIT_ENTRY_KEY},
 		AppShellTask{kTaskGenAssetsMapping, ""},
 		AppShellTask{kTaskBuildBinary, ""},
@@ -72,6 +74,8 @@ func (app *AppShell) Dist() error {
 		loggers.Error("Error when generating assets mapping source code, %v", err)
 	} else if err = app.buildStyles(""); err != nil {
 		loggers.Error("Error when building stylesheets, %v", err)
+	} else if err = app.clearJavaScriptsAssets(); err != nil {
+		loggers.Error("Error when clear javascripts, %v", err)
 	} else if err = app.buildJavaScripts(APP_SHELL_JS_TASK_INIT_ENTRY_KEY); err != nil {
 		loggers.Error("Error when building javascripts, %v", err)
 	} else if err = app.genAssetsMapping(); err != nil {
@@ -180,6 +184,8 @@ func (app *AppShell) startRunner() {
 			app.curError = app.buildImages(task.module)
 		case kTaskBuildStyles:
 			app.curError = app.buildStyles(task.module)
+		case kTaskClearJavaScripts:
+			app.curError = app.clearJavaScriptsAssets()
 		case kTaskBuildJavaScripts:
 			app.curError = app.buildJavaScripts(task.module)
 		case kTaskGenAssetsMapping:
@@ -255,6 +261,18 @@ func (app *AppShell) start() error {
 	fmt.Println()
 	go app.command.Wait()
 	time.Sleep(500 * time.Millisecond)
+	return nil
+}
+
+func (app *AppShell) clearJavaScriptsAssets() error {
+	rootConfig.RLock()
+	entries := append(rootConfig.Assets.VendorSets, rootConfig.Assets.Entries...)
+	rootConfig.RUnlock()
+	entryMap := make(map[string]string)
+	for _, entry := range entries {
+		entryMap[entry.Name] = ""
+	}
+	assets.ClearJavaScriptsDir(entryMap)
 	return nil
 }
 
