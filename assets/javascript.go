@@ -1,9 +1,9 @@
 package assets
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
+	"path"
 
 	"github.com/mijia/gobuildweb/loggers"
 )
@@ -28,15 +28,25 @@ func (js _JavaScript) Build(isProduction bool) error {
 		return nil
 	}
 
-	target := fmt.Sprintf("public/javascripts/%s.js", js.entry)
-	filename := fmt.Sprintf("assets/javascripts/%s.js", js.entry)
+	suffixJs, suffixCoffee, originDir, targetDir := ".js", ".coffee", "assets/javascripts", "public/javascripts"
+	filename, outfile := path.Join(originDir, js.entry+suffixJs), path.Join(targetDir, js.entry+suffixJs)
 	isCoffee := false
 	if exist, _ := js.checkFile(filename, true); !exist {
-		filename = fmt.Sprintf("assets/javascripts/%s.coffee", js.entry)
+		filename = path.Join(originDir, js.entry+suffixCoffee)
 		if exist, err := js.checkFile(filename, true); !exist {
 			return err
 		}
 		isCoffee = true
+	}
+
+	// * generate the hash, just loaded if not change
+	outTarget := js.traverEntryFingerPrint(originDir, targetDir, js.entry, filename, suffixJs)
+	mapping := js._Asset.getJsonAssetsMapping()
+	if targetName, ok := mapping[outfile[len("public/"):]]; ok {
+		if targetName == outTarget[len("public/"):] {
+			loggers.Succ("[JavaScript][%s] Loaded assset: %s", js.entry, outTarget)
+			return nil
+		}
 	}
 
 	// * Maybe it's a template using images, styles assets links
@@ -68,7 +78,7 @@ func (js _JavaScript) Build(isProduction bool) error {
 	} else {
 		params = append(params, "--debug")
 	}
-	params = append(params, "--outfile", target)
+	params = append(params, "--outfile", outfile)
 	cmd := exec.Command("./node_modules/browserify/bin/cmd.js", params...)
 	loggers.Debug("[JavaScript][%s] Building asset: %s, %v", js.entry, filename, cmd.Args)
 	cmd.Stderr = os.Stderr
@@ -79,9 +89,13 @@ func (js _JavaScript) Build(isProduction bool) error {
 		return err
 	}
 
-	// * generate the hash, clear old bundle, move to target
-	target = js.addFingerPrint("public/javascripts", js.entry+".js")
-	loggers.Succ("[JavaScript][%s] Saved assset: %s", js.entry, target)
+	//clear old bundle, move to target
+	js._Asset.removeOldFile(targetDir, js.entry+suffixJs)
+	if err := os.Rename(outfile, outTarget); err != nil {
+		loggers.Error("rename file error, %v", err)
+	}
 
+	// target = js.addFingerPrint("public/javascripts", js.entry+".js")
+	loggers.Succ("[JavaScript][%s] Saved assset: %s", js.entry, outTarget)
 	return nil
 }
