@@ -98,16 +98,15 @@ func (a _Asset) traverEntryFingerPrint(originDir, targetDir, entry, filename, su
 		return filepath.Walk(walkDir, func(fn string, info os.FileInfo, err error) error {
 			if err != nil {
 				return filepath.SkipDir
-			} else {
-				if !info.IsDir() {
-					if file, err := os.Open(path.Join(fn)); err == nil {
-						defer file.Close()
-						if _, err := io.Copy(h, file); err != nil {
-							return err
-						}
-					} else {
+			}
+			if !info.IsDir() {
+				if file, err := os.Open(path.Join(fn)); err == nil {
+					defer file.Close()
+					if _, err := io.Copy(h, file); err != nil {
 						return err
 					}
+				} else {
+					return err
 				}
 			}
 			return err
