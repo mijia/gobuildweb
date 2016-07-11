@@ -17,10 +17,13 @@ import (
 
 type TaskType int
 
+var APP_SHELL_JS_TASK_INIT_ENTRY_KEY = "*****gb-init*****"
+
 const (
 	// The Order is important
 	kTaskBuildImages TaskType = iota
 	kTaskBuildStyles
+	kTaskClearJavaScripts
 	kTaskBuildJavaScripts
 	kTaskGenAssetsMapping
 	kTaskBinaryTest
@@ -49,7 +52,8 @@ func (app *AppShell) Run() error {
 		AppShellTask{kTaskBuildImages, ""},
 		AppShellTask{kTaskGenAssetsMapping, ""},
 		AppShellTask{kTaskBuildStyles, ""},
-		AppShellTask{kTaskBuildJavaScripts, ""},
+		AppShellTask{kTaskClearJavaScripts, ""},
+		AppShellTask{kTaskBuildJavaScripts, APP_SHELL_JS_TASK_INIT_ENTRY_KEY},
 		AppShellTask{kTaskGenAssetsMapping, ""},
 		AppShellTask{kTaskBuildBinary, ""},
 		AppShellTask{kTaskBinaryRestart, ""},
@@ -70,7 +74,9 @@ func (app *AppShell) Dist() error {
 		loggers.Error("Error when generating assets mapping source code, %v", err)
 	} else if err = app.buildStyles(""); err != nil {
 		loggers.Error("Error when building stylesheets, %v", err)
-	} else if err = app.buildJavaScripts(""); err != nil {
+	} else if err = app.clearJavaScriptsAssets(); err != nil {
+		loggers.Error("Error when clear javascripts, %v", err)
+	} else if err = app.buildJavaScripts(APP_SHELL_JS_TASK_INIT_ENTRY_KEY); err != nil {
 		loggers.Error("Error when building javascripts, %v", err)
 	} else if err = app.genAssetsMapping(); err != nil {
 		loggers.Error("Error when generating assets mapping source code, %v", err)
@@ -178,6 +184,8 @@ func (app *AppShell) startRunner() {
 			app.curError = app.buildImages(task.module)
 		case kTaskBuildStyles:
 			app.curError = app.buildStyles(task.module)
+		case kTaskClearJavaScripts:
+			app.curError = app.clearJavaScriptsAssets()
 		case kTaskBuildJavaScripts:
 			app.curError = app.buildJavaScripts(task.module)
 		case kTaskGenAssetsMapping:
@@ -256,6 +264,18 @@ func (app *AppShell) start() error {
 	return nil
 }
 
+func (app *AppShell) clearJavaScriptsAssets() error {
+	rootConfig.RLock()
+	entries := append(rootConfig.Assets.VendorSets, rootConfig.Assets.Entries...)
+	rootConfig.RUnlock()
+	entryMap := make(map[string]string)
+	for _, entry := range entries {
+		entryMap[entry.Name] = ""
+	}
+	assets.ClearJavaScriptsDir(entryMap)
+	return nil
+}
+
 func (app *AppShell) buildAssetsTraverse(functor func(entry string) error) error {
 	rootConfig.RLock()
 	vendors := rootConfig.Assets.VendorSets
@@ -322,9 +342,12 @@ func (app *AppShell) buildJavaScripts(entry string) error {
 	}
 	rootConfig.RUnlock()
 
-	if entry == "" {
-		if err := assets.ResetDir("public/javascripts", true); err != nil {
-			return err
+	if entry == "" || entry == APP_SHELL_JS_TASK_INIT_ENTRY_KEY {
+		if entry == "" {
+			if err := assets.ResetDir("public/javascripts", true); err != nil {
+				return err
+			}
+			app.genAssetsMapping()
 		}
 		return app.buildAssetsTraverse(app.buildJavaScripts)
 	}

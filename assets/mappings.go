@@ -69,7 +69,7 @@ func (d _JsonMappingDumper) Dump(mapping *AssetsMapping) error {
 }
 
 type _GoPkgMappingDumper struct {
-	pkgName string
+	pkgName         string
 	pkgNameRelative string
 }
 
@@ -155,7 +155,7 @@ func (m _Mappings) Build(isProduction bool) error {
 		}
 	} else {
 		dumper = _GoPkgMappingDumper{
-			pkgName: m.config.AssetsMappingPkg,
+			pkgName:         m.config.AssetsMappingPkg,
 			pkgNameRelative: m.config.AssetsMappingPkgRelative,
 		}
 	}
