@@ -17,6 +17,8 @@ import (
 
 type TaskType int
 
+var APP_SHELL_JS_TASK_INIT_ENTRY_KEY = "*****gb-init*****"
+
 const (
 	// The Order is important
 	kTaskBuildImages TaskType = iota
@@ -49,7 +51,7 @@ func (app *AppShell) Run() error {
 		AppShellTask{kTaskBuildImages, ""},
 		AppShellTask{kTaskGenAssetsMapping, ""},
 		AppShellTask{kTaskBuildStyles, ""},
-		AppShellTask{kTaskBuildJavaScripts, ""},
+		AppShellTask{kTaskBuildJavaScripts, APP_SHELL_JS_TASK_INIT_ENTRY_KEY},
 		AppShellTask{kTaskGenAssetsMapping, ""},
 		AppShellTask{kTaskBuildBinary, ""},
 		AppShellTask{kTaskBinaryRestart, ""},
@@ -70,7 +72,7 @@ func (app *AppShell) Dist() error {
 		loggers.Error("Error when generating assets mapping source code, %v", err)
 	} else if err = app.buildStyles(""); err != nil {
 		loggers.Error("Error when building stylesheets, %v", err)
-	} else if err = app.buildJavaScripts(""); err != nil {
+	} else if err = app.buildJavaScripts(APP_SHELL_JS_TASK_INIT_ENTRY_KEY); err != nil {
 		loggers.Error("Error when building javascripts, %v", err)
 	} else if err = app.genAssetsMapping(); err != nil {
 		loggers.Error("Error when generating assets mapping source code, %v", err)
@@ -322,9 +324,12 @@ func (app *AppShell) buildJavaScripts(entry string) error {
 	}
 	rootConfig.RUnlock()
 
-	if entry == "" {
-		if err := assets.ResetDir("public/javascripts", true); err != nil {
-			return err
+	if entry == "" || entry == APP_SHELL_JS_TASK_INIT_ENTRY_KEY {
+		if entry == "" {
+			if err := assets.ResetDir("public/javascripts", true); err != nil {
+				return err
+			}
+			app.genAssetsMapping()
 		}
 		return app.buildAssetsTraverse(app.buildJavaScripts)
 	}

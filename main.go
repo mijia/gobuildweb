@@ -78,6 +78,7 @@ func main() {
 		if _, err := toml.DecodeFile("project.toml", &rootConfig); err != nil {
 			loggers.ERROR.Fatalf("Cannot decode the project.toml into TOML format, %v", err)
 		}
+
 		loggers.SUCC.Printf("Loaded project.toml... %s", rootConfig.Package.Name)
 		if err := cmd(args[1:]); err != nil {
 			loggers.ERROR.Fatalf("Executing command [%v] error, %v", args[0], err)

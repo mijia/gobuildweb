@@ -3,8 +3,11 @@ package assets
 import (
 	"crypto/md5"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"github.com/mijia/gobuildweb/loggers"
 	"io"
+	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -12,14 +15,14 @@ import (
 )
 
 type Config struct {
-	UrlPrefix         string   `toml:"url_prefix"`
-	AssetsMappingPkg  string   `toml:"assets_mapping_pkg"`
-	AssetsMappingPkgRelative  string   `toml:"assets_mapping_pkg_relative"`
-	AssetsMappingJson string   `toml:"assets_mapping_json"`
-	ImageExts         []string `toml:"image_exts"`
-	Dependencies      []string `toml:"deps"`
-	VendorSets        []Entry  `toml:"vendor_set"`
-	Entries           []Entry  `toml:"entry"`
+	UrlPrefix                string   `toml:"url_prefix"`
+	AssetsMappingPkg         string   `toml:"assets_mapping_pkg"`
+	AssetsMappingPkgRelative string   `toml:"assets_mapping_pkg_relative"`
+	AssetsMappingJson        string   `toml:"assets_mapping_json"`
+	ImageExts                []string `toml:"image_exts"`
+	Dependencies             []string `toml:"deps"`
+	VendorSets               []Entry  `toml:"vendor_set"`
+	Entries                  []Entry  `toml:"entry"`
 }
 
 func (config Config) getAssetEntry(entryName string) (Entry, bool) {
@@ -79,6 +82,51 @@ func (a _Asset) addFingerPrint(assetDir, filename string) string {
 		}
 	}
 	return target
+}
+
+func (a _Asset) traverEntryFingerPrint(originDir, targetDir, entry, filename, suffix string) string {
+	h, target := md5.New(), path.Join(targetDir, entry, suffix)
+	if file, err := os.Open(filename); err != nil {
+		return target
+	} else {
+		defer file.Close()
+		if _, err := io.Copy(h, file); err != nil {
+			return target
+		}
+	}
+	goWalk := func(walkDir string) error {
+		return filepath.Walk(walkDir, func(fn string, info os.FileInfo, err error) error {
+			if err != nil {
+				return filepath.SkipDir
+			} else {
+				if !info.IsDir() {
+					if file, err := os.Open(path.Join(fn)); err == nil {
+						defer file.Close()
+						if _, err := io.Copy(h, file); err != nil {
+							return err
+						}
+					} else {
+						return err
+					}
+				}
+			}
+			return err
+		})
+	}
+	err := goWalk(path.Join(originDir, entry))
+	if err != nil && err != filepath.SkipDir {
+		return target
+	}
+	if entryInfo, existed := GetEntryConfig(a.config, entry); existed {
+		for _, dep := range entryInfo.Dependencies {
+			err := goWalk(path.Join(originDir, dep))
+			if err != nil && err != filepath.SkipDir {
+				return target
+			}
+		}
+	}
+	newName := fmt.Sprintf("fp%s-%s", hex.EncodeToString(h.Sum(nil)), entry+suffix)
+	return path.Join(targetDir, newName)
 }
 
 func (a _Asset) copyFile(dest, src string) error {
@@ -160,4 +208,19 @@ func ResetDir(dir string, rebuild bool) error {
 		}
 	}
 	return nil
+}
+
+func (a _Asset) getJsonAssetsMapping() map[string]string {
+	mapping := make(map[string]string)
+	filename := a.config.AssetsMappingJson
+	data, err := ioutil.ReadFile(filename)
+	if err != nil {
+		loggers.Error(fmt.Sprintf("Cannot decoding the assets into json, %v", err))
+	} else {
+		err = json.Unmarshal(data, &mapping)
+		if err != nil {
+			loggers.Error(fmt.Sprintf("Cannot unmarshal the assets into json, %v", err))
+		}
+	}
+	return mapping
 }
