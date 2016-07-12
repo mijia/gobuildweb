@@ -209,6 +209,15 @@ func ResetDir(dir string, rebuild bool) error {
 	return nil
 }
 
+func CheckMkdir(dir string) error {
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		if err := os.MkdirAll(dir, os.ModePerm|os.ModeDir); err != nil {
+			return fmt.Errorf("Cannot mkdir %s, %v", dir, err)
+		}
+	}
+	return nil
+}
+
 func ClearJavaScriptsDir(entryMap map[string]string) error {
 	return filepath.Walk("public/javascripts", func(fname string, info os.FileInfo, err error) error {
 		if err == nil && !info.IsDir() {
