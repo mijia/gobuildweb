@@ -342,12 +342,19 @@ func (app *AppShell) buildJavaScripts(entry string) error {
 	}
 	rootConfig.RUnlock()
 
-	if entry == "" || entry == APP_SHELL_JS_TASK_INIT_ENTRY_KEY {
-		if entry == "" {
-			if err := assets.ResetDir("public/javascripts", true); err != nil {
-				return err
-			}
-			app.genAssetsMapping()
+	if entry == APP_SHELL_JS_TASK_INIT_ENTRY_KEY {
+		if err := assets.CheckMkdir("public/javascripts"); err != nil {
+			return err
+		}
+		return app.buildAssetsTraverse(app.buildJavaScripts)
+	}
+
+	if entry == "" {
+		if err := assets.ResetDir("public/javascripts", true); err != nil {
+			return err
+		}
+		if err := app.genAssetsMapping(); err != nil {
+			return err
 		}
 		return app.buildAssetsTraverse(app.buildJavaScripts)
 	}
