@@ -124,10 +124,6 @@ func updateGolangDeps() error {
 
 	fmt.Println()
 	loggers.Info("Start to loading Go dependencies...")
-	if hasGetColangDeps() {
-		loggers.Info("Has Loaded Go package dependencies")
-		return nil
-	}
 	params := []string{"get", ""}
 	for _, dep := range rootConfig.Package.Dependencies {
 		params[len(params)-1] = dep
