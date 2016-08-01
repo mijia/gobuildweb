@@ -70,22 +70,32 @@ func updateAssetsDeps() error {
 
 	fmt.Println()
 	loggers.Info("Start to loading assets dependencies...")
-	checkParams := []string{"list", "--depth", "0", ""}
+	checkParams := []string{"list", "--depth", "0"}
 	params := []string{"install", ""}
 	deps := make([]string, len(rootConfig.Assets.Dependencies), len(rootConfig.Assets.Dependencies)+1)
 	copy(deps, rootConfig.Assets.Dependencies)
-	// add all dev deps for xxxify
 	deps = append(deps, "browserify", "coffeeify", "envify", "uglifyify", "babelify", "babel-preset-es2015", "babel-preset-react", "nib", "stylus")
-	for _, dep := range deps {
-		checkParams[len(checkParams)-1] = dep
-		listCmd := exec.Command("npm", checkParams...)
-		listCmd.Env = mergeEnv(nil)
-		if err := listCmd.Run(); err == nil {
-			// the module has been installed
-			loggers.Info("Checked npm module: %v", dep)
-			continue
-		}
+	notInstalledDeps := make([]string, 0)
+	listCmd := exec.Command("npm", checkParams...)
+	listCmd.Env = mergeEnv(nil)
+	npmPackageNames := ""
+	if outputs, err := listCmd.CombinedOutput(); err != nil {
+		// the module has been installed
+		loggers.Error("npm check error: %v", err)
+		return err
+	} else {
+		npmPackageNames = string(outputs)
+	}
 
+	for _, dep := range deps {
+		if strings.Contains(npmPackageNames, dep) {
+			loggers.Info("npm module %s is found", dep)
+		} else {
+			notInstalledDeps = append(notInstalledDeps, dep)
+		}
+	}
+
+	for _, dep := range notInstalledDeps {
 		params[len(params)-1] = dep
 		loggers.Info("Loading npm module: %v", dep)
 		installCmd := exec.Command("npm", params...)
@@ -199,21 +209,7 @@ func (pw *ProjectWatcher) WatchOnly(dir string, appArgs []string) error {
 		if err := pw.addDirs(dir); err != nil {
 			return err
 		}
-		//capture Interrupt signal
-		/*
-		interruptChan := make(chan os.Signal, 1)
-		signal.Notify(interruptChan, os.Interrupt)
 
-		go func(){
-			for sig := range interruptChan {
-				loggers.Info("Receive Interrupt Signal(%v), kill the app!", sig)
-				pw.app.kill()
-				loggers.Info("Leaving gobuildweb, bye!", sig)
-				os.Exit(0)
-			}
-		}()
-
-		*/
 		go pw.watchProject()
 		loggers.Info("Waiting for file changes ...")
 
@@ -239,21 +235,6 @@ func (pw *ProjectWatcher) runAndWatch(dir string, appArgs []string) error {
 		if err := pw.addDirs(dir); err != nil {
 			return err
 		}
-
-		/*
-		//capture Interrupt signal
-		interruptChan := make(chan os.Signal, 1)
-		signal.Notify(interruptChan, os.Interrupt)
-
-		go func(){
-			for sig := range interruptChan {
-				loggers.Info("Receive Interrupt Signal(%v), kill the app!", sig)
-				pw.app.kill()
-				loggers.Info("Leaving gobuildweb, bye!", sig)
-				os.Exit(0)
-			}
-		}()
-		*/
 
 		go pw.watchProject()
 		loggers.Info("Waiting for file changes ...")
@@ -387,6 +368,8 @@ func (pw *ProjectWatcher) maybeGoCodeChanged(fname string) {
 				loggers.Error("Cannot get go module path name, %v", err)
 			}
 		}
+		loggers.Info(fname + " has been changed, buildBinary starts!")
+		pw.app.stopBuildBinary()
 		pw.addTask(kTaskBuildBinary, goModule)
 		pw.addTask(kTaskBinaryRestart, "")
 	}
@@ -412,6 +395,7 @@ func (pw *ProjectWatcher) maybeAssetsChanged(fname string) {
 				// we naively think this as a global change
 				pw.addTask(taskTypes[i], "")
 			}
+			loggers.Info(fname + " has been changed!")
 			pw.addTask(kTaskGenAssetsMapping, "")
 		}
 	}
