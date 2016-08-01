@@ -58,6 +58,7 @@ func main() {
 	cmds := map[string]Command{
 		"run":  commandRun,
 		"dist": commandDist,
+		"watch": commandWatch,
 	}
 	flag.Parse()
 	args := flag.Args()

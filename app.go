@@ -49,13 +49,13 @@ func (app *AppShell) Run() error {
 	app.isProduction = false
 	go app.startRunner()
 	app.executeTask(
+		AppShellTask{kTaskBuildBinary, ""},
 		AppShellTask{kTaskBuildImages, ""},
 		AppShellTask{kTaskGenAssetsMapping, ""},
 		AppShellTask{kTaskBuildStyles, ""},
 		AppShellTask{kTaskClearJavaScripts, ""},
 		AppShellTask{kTaskBuildJavaScripts, APP_SHELL_JS_TASK_INIT_ENTRY_KEY},
 		AppShellTask{kTaskGenAssetsMapping, ""},
-		AppShellTask{kTaskBuildBinary, ""},
 		AppShellTask{kTaskBinaryRestart, ""},
 	)
 	return nil

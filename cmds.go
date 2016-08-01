@@ -13,6 +13,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/mijia/gobuildweb/loggers"
 	"gopkg.in/fsnotify.v1"
+	"runtime"
 )
 
 type Command func(args []string) error
@@ -30,11 +31,21 @@ func commandDist(args []string) error {
 	return NewAppShell(args).Dist()
 }
 
+func commandWatch(args []string) error {
+	fmt.Println()
+	if err := NewProjectWatcher().WatchOnly(".", args); err != nil {
+		loggers.Error("Failed to start watching project changes, %v", err)
+		return err
+	}
+	return nil
+}
+
 func commandRun(args []string) error {
 	if err := updateGolangDeps(); err != nil {
 		loggers.Error("Failed to load project Go dependencies, %v", err)
 		return err
 	}
+
 	if err := updateAssetsDeps(); err != nil {
 		loggers.Error("Failed to load project assets dependencies, %v", err)
 		return err
@@ -45,6 +56,7 @@ func commandRun(args []string) error {
 		loggers.Error("Failed to start watching project changes, %v", err)
 		return err
 	}
+
 	return nil
 }
 
@@ -160,6 +172,55 @@ func NewProjectWatcher() *ProjectWatcher {
 	}
 }
 
+func (pw *ProjectWatcher) WatchOnly(dir string, appArgs []string) error {
+	if watcher, err := fsnotify.NewWatcher(); err != nil {
+		return err
+	} else {
+		pw.app = NewAppShell(appArgs)
+		pw.app.isProduction = false
+		go pw.app.startRunner()
+		goOs, goArch := runtime.GOOS, runtime.GOARCH
+		pw.app.binName = pw.app.binaryName(rootConfig.Package.Name, rootConfig.Package.Version, goOs, goArch)
+		if _, err := os.Stat(pw.app.binName); err != nil {
+			loggers.Warn(pw.app.binName + " does not exist, binaryBuild start!")
+			pw.app.executeTask(
+				AppShellTask{kTaskBuildBinary, ""},
+				AppShellTask{kTaskBinaryRestart, ""},
+			)
+		} else {
+			pw.app.executeTask(
+				AppShellTask{kTaskBinaryRestart, ""},
+			)
+		}
+		pw.watcher = watcher
+		defer func(){
+			pw.watcher.Close()
+		}()
+		if err := pw.addDirs(dir); err != nil {
+			return err
+		}
+		//capture Interrupt signal
+		/*
+		interruptChan := make(chan os.Signal, 1)
+		signal.Notify(interruptChan, os.Interrupt)
+
+		go func(){
+			for sig := range interruptChan {
+				loggers.Info("Receive Interrupt Signal(%v), kill the app!", sig)
+				pw.app.kill()
+				loggers.Info("Leaving gobuildweb, bye!", sig)
+				os.Exit(0)
+			}
+		}()
+
+		*/
+		go pw.watchProject()
+		loggers.Info("Waiting for file changes ...")
+
+		<-pw.stopChan
+		return nil
+	}
+}
 func (pw *ProjectWatcher) runAndWatch(dir string, appArgs []string) error {
 	if watcher, err := fsnotify.NewWatcher(); err != nil {
 		return err
@@ -168,16 +229,37 @@ func (pw *ProjectWatcher) runAndWatch(dir string, appArgs []string) error {
 		if err := pw.app.Run(); err != nil {
 			return err
 		}
-
 		pw.watcher = watcher
-		defer pw.watcher.Close()
+		defer func(){
+			loggers.Info("Defer here, kill App")
+			pw.app.kill()
+			loggers.Info("Leaving gobuildweb, bye!")
+			pw.watcher.Close()
+		}()
 		if err := pw.addDirs(dir); err != nil {
 			return err
 		}
+
+		/*
+		//capture Interrupt signal
+		interruptChan := make(chan os.Signal, 1)
+		signal.Notify(interruptChan, os.Interrupt)
+
+		go func(){
+			for sig := range interruptChan {
+				loggers.Info("Receive Interrupt Signal(%v), kill the app!", sig)
+				pw.app.kill()
+				loggers.Info("Leaving gobuildweb, bye!", sig)
+				os.Exit(0)
+			}
+		}()
+		*/
+
 		go pw.watchProject()
 		loggers.Info("Waiting for file changes ...")
 
 		<-pw.stopChan
+
 		return nil
 	}
 }
