@@ -13,6 +13,9 @@ import (
 
 	"github.com/mijia/gobuildweb/assets"
 	"github.com/mijia/gobuildweb/loggers"
+	"os/signal"
+	"strings"
+	"sync"
 )
 
 type TaskType int
@@ -43,22 +46,75 @@ type AppShell struct {
 	taskChan     chan AppShellTask
 	curError     error
 	command      *exec.Cmd
+	buildGuard   *sync.Mutex
+	buildCmd     *exec.Cmd
 }
 
 func (app *AppShell) Run() error {
 	app.isProduction = false
+	buildImageDone := make(chan bool)
+	buildJavascriptDone := make(chan bool)
+	buildStylesDone := make(chan bool)
+	buildBinaryDone := make(chan bool)
+
+	go func() {
+		err := app.buildImages("")
+		if app.curError == nil  && err != nil {
+			app.curError = err
+		}
+		buildImageDone <- true
+	}()
+	go func() {
+		err := app.buildStyles("")
+		if app.curError == nil && err != nil {
+			app.curError = err
+		}
+		buildStylesDone <- true
+	}()
+	go func() {
+		app.clearJavaScriptsAssets()
+		err := app.buildJavaScripts(APP_SHELL_JS_TASK_INIT_ENTRY_KEY)
+		if app.curError == nil && err != nil {
+			app.curError = err
+		}
+		buildJavascriptDone <- true
+	}()
+	go func() {
+		err := app.buildBinary("")
+		if app.curError == nil && err != nil {
+			app.curError = err
+		}
+		buildBinaryDone <- true
+	}()
+
+	<- buildImageDone
+	<- buildStylesDone
+	<- buildJavascriptDone
+	<- buildBinaryDone
+
 	go app.startRunner()
 	app.executeTask(
-		AppShellTask{kTaskBuildImages, ""},
 		AppShellTask{kTaskGenAssetsMapping, ""},
-		AppShellTask{kTaskBuildStyles, ""},
-		AppShellTask{kTaskClearJavaScripts, ""},
-		AppShellTask{kTaskBuildJavaScripts, APP_SHELL_JS_TASK_INIT_ENTRY_KEY},
-		AppShellTask{kTaskGenAssetsMapping, ""},
-		AppShellTask{kTaskBuildBinary, ""},
 		AppShellTask{kTaskBinaryRestart, ""},
 	)
 	return nil
+}
+
+func (app *AppShell)interruptProcess(){
+	//capture Interrupt signal
+	if(app.isProduction) {
+		return
+	}
+	interruptChan := make(chan os.Signal, 1)
+	signal.Notify(interruptChan, os.Interrupt)
+	go func(){
+		for sig := range interruptChan {
+			loggers.Info("Receive Interrupt Signal(%v), kill the app!", sig)
+			app.kill()
+			loggers.Info("Leaving gobuildweb, bye!")
+			os.Exit(0)
+		}
+	}()
 }
 
 func (app *AppShell) Dist() error {
@@ -176,6 +232,7 @@ func (app *AppShell) buildPackage() error {
 	loggers.Succ("Finish packing the deploy package in %s.zip", pkgName)
 	return nil
 }
+
 
 func (app *AppShell) startRunner() {
 	for task := range app.taskChan {
@@ -441,11 +498,21 @@ func (app *AppShell) buildBinary(params ...string) error {
 		"GOOS":   goOs,
 		"GOARCH": goArch,
 	})
+
 	loggers.Debug("Running build: %v", buildCmd.Args)
 	start := time.Now()
-	if err := buildCmd.Run(); err != nil {
-		loggers.Error("Building failed")
-		return err
+	app.buildGuard.Lock()
+	app.buildCmd = buildCmd
+	app.buildGuard.Unlock()
+	if err := app.buildCmd.Run(); err != nil {
+		if strings.Contains(err.Error(), "interrupt") {
+			loggers.Info("File changed while building binary, rebuild will start!")
+			<- app.taskChan
+			return nil
+		} else {
+			loggers.Error("Building failed: %v", err)
+			return err
+		}
 	}
 	app.binName = binName
 	duration := float64(time.Since(start).Nanoseconds()) / 1e6
@@ -454,8 +521,28 @@ func (app *AppShell) buildBinary(params ...string) error {
 }
 
 func NewAppShell(args []string) *AppShell {
-	return &AppShell{
+	app := &AppShell{
 		args:     args,
-		taskChan: make(chan AppShellTask),
+		taskChan: make(chan AppShellTask,2),
+		buildGuard: &sync.Mutex{},
 	}
+	app.interruptProcess()
+	return app
+}
+
+func (app *AppShell) stopBuildBinary(params ...string) error {
+	app.buildGuard.Lock()
+	defer app.buildGuard.Unlock()
+	if app.buildCmd!= nil && (app.buildCmd.ProcessState == nil || !app.buildCmd.ProcessState.Exited()) {
+		if runtime.GOOS == "windows" {
+			if err := app.buildCmd.Process.Kill(); err != nil {
+				loggers.Error(err.Error())
+				return err
+			}
+		} else if err := app.buildCmd.Process.Signal(os.Interrupt); err != nil {
+			loggers.Error(err.Error())
+			return err
+		}
+	}
+	return nil
 }

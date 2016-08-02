@@ -13,6 +13,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/mijia/gobuildweb/loggers"
 	"gopkg.in/fsnotify.v1"
+	"runtime"
 )
 
 type Command func(args []string) error
@@ -30,11 +31,21 @@ func commandDist(args []string) error {
 	return NewAppShell(args).Dist()
 }
 
+func commandWatch(args []string) error {
+	fmt.Println()
+	if err := NewProjectWatcher().WatchOnly(".", args); err != nil {
+		loggers.Error("Failed to start watching project changes, %v", err)
+		return err
+	}
+	return nil
+}
+
 func commandRun(args []string) error {
 	if err := updateGolangDeps(); err != nil {
 		loggers.Error("Failed to load project Go dependencies, %v", err)
 		return err
 	}
+
 	if err := updateAssetsDeps(); err != nil {
 		loggers.Error("Failed to load project assets dependencies, %v", err)
 		return err
@@ -45,6 +56,7 @@ func commandRun(args []string) error {
 		loggers.Error("Failed to start watching project changes, %v", err)
 		return err
 	}
+
 	return nil
 }
 
@@ -58,22 +70,32 @@ func updateAssetsDeps() error {
 
 	fmt.Println()
 	loggers.Info("Start to loading assets dependencies...")
-	checkParams := []string{"list", "--depth", "0", ""}
+	checkParams := []string{"list", "--depth", "0"}
 	params := []string{"install", ""}
 	deps := make([]string, len(rootConfig.Assets.Dependencies), len(rootConfig.Assets.Dependencies)+1)
 	copy(deps, rootConfig.Assets.Dependencies)
-	// add all dev deps for xxxify
 	deps = append(deps, "browserify", "coffeeify", "envify", "uglifyify", "babelify", "babel-preset-es2015", "babel-preset-react", "nib", "stylus")
-	for _, dep := range deps {
-		checkParams[len(checkParams)-1] = dep
-		listCmd := exec.Command("npm", checkParams...)
-		listCmd.Env = mergeEnv(nil)
-		if err := listCmd.Run(); err == nil {
-			// the module has been installed
-			loggers.Info("Checked npm module: %v", dep)
-			continue
-		}
+	notInstalledDeps := make([]string, 0)
+	listCmd := exec.Command("npm", checkParams...)
+	listCmd.Env = mergeEnv(nil)
+	npmPackageNames := ""
+	if outputs, err := listCmd.CombinedOutput(); err != nil {
+		// the module has been installed
+		loggers.Error("npm check error: %v", err)
+		return err
+	} else {
+		npmPackageNames = string(outputs)
+	}
 
+	for _, dep := range deps {
+		if strings.Contains(npmPackageNames, dep) {
+			loggers.Info("npm module %s is found", dep)
+		} else {
+			notInstalledDeps = append(notInstalledDeps, dep)
+		}
+	}
+
+	for _, dep := range notInstalledDeps {
 		params[len(params)-1] = dep
 		loggers.Info("Loading npm module: %v", dep)
 		installCmd := exec.Command("npm", params...)
@@ -124,10 +146,6 @@ func updateGolangDeps() error {
 
 	fmt.Println()
 	loggers.Info("Start to loading Go dependencies...")
-	if hasGetColangDeps() {
-		loggers.Info("Has Loaded Go package dependencies")
-		return nil
-	}
 	params := []string{"get", ""}
 	for _, dep := range rootConfig.Package.Dependencies {
 		params[len(params)-1] = dep
@@ -164,6 +182,41 @@ func NewProjectWatcher() *ProjectWatcher {
 	}
 }
 
+func (pw *ProjectWatcher) WatchOnly(dir string, appArgs []string) error {
+	if watcher, err := fsnotify.NewWatcher(); err != nil {
+		return err
+	} else {
+		pw.app = NewAppShell(appArgs)
+		pw.app.isProduction = false
+		go pw.app.startRunner()
+		goOs, goArch := runtime.GOOS, runtime.GOARCH
+		pw.app.binName = pw.app.binaryName(rootConfig.Package.Name, rootConfig.Package.Version, goOs, goArch)
+		if _, err := os.Stat(pw.app.binName); err != nil {
+			loggers.Warn(pw.app.binName + " does not exist, binaryBuild start!")
+			pw.app.executeTask(
+				AppShellTask{kTaskBuildBinary, ""},
+				AppShellTask{kTaskBinaryRestart, ""},
+			)
+		} else {
+			pw.app.executeTask(
+				AppShellTask{kTaskBinaryRestart, ""},
+			)
+		}
+		pw.watcher = watcher
+		defer func(){
+			pw.watcher.Close()
+		}()
+		if err := pw.addDirs(dir); err != nil {
+			return err
+		}
+
+		go pw.watchProject()
+		loggers.Info("Waiting for file changes ...")
+
+		<-pw.stopChan
+		return nil
+	}
+}
 func (pw *ProjectWatcher) runAndWatch(dir string, appArgs []string) error {
 	if watcher, err := fsnotify.NewWatcher(); err != nil {
 		return err
@@ -172,16 +225,22 @@ func (pw *ProjectWatcher) runAndWatch(dir string, appArgs []string) error {
 		if err := pw.app.Run(); err != nil {
 			return err
 		}
-
 		pw.watcher = watcher
-		defer pw.watcher.Close()
+		defer func(){
+			loggers.Info("Defer here, kill App")
+			pw.app.kill()
+			loggers.Info("Leaving gobuildweb, bye!")
+			pw.watcher.Close()
+		}()
 		if err := pw.addDirs(dir); err != nil {
 			return err
 		}
+
 		go pw.watchProject()
 		loggers.Info("Waiting for file changes ...")
 
 		<-pw.stopChan
+
 		return nil
 	}
 }
@@ -309,6 +368,8 @@ func (pw *ProjectWatcher) maybeGoCodeChanged(fname string) {
 				loggers.Error("Cannot get go module path name, %v", err)
 			}
 		}
+		loggers.Info(fname + " has been changed, buildBinary starts!")
+		pw.app.stopBuildBinary()
 		pw.addTask(kTaskBuildBinary, goModule)
 		pw.addTask(kTaskBinaryRestart, "")
 	}
@@ -334,6 +395,7 @@ func (pw *ProjectWatcher) maybeAssetsChanged(fname string) {
 				// we naively think this as a global change
 				pw.addTask(taskTypes[i], "")
 			}
+			loggers.Info(fname + " has been changed!")
 			pw.addTask(kTaskGenAssetsMapping, "")
 		}
 	}

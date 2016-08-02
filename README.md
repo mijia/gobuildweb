@@ -30,6 +30,7 @@ gobuildweb > Build a Golang web application.
 
 Usage:
   run       Will watch your file changes and run the application, aka the dev mode
+  watch     just watch your file changes and run the application without building, aka the dev mode
   dist      Build your web application for production
 ```
 

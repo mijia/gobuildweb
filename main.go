@@ -46,7 +46,8 @@ type DistributionConfig struct {
 
 func usage() {
 	fmt.Println("Usage:")
-	fmt.Println("  run       Will watch your file changes and run the application")
+	fmt.Println("  run       Build assets and binary, and then watch your file changes and run the application")
+	fmt.Println("  watch     Just watch your file changes and run the application without building")
 	fmt.Println("  dist      Build your web application")
 	os.Exit(1)
 }
@@ -58,6 +59,7 @@ func main() {
 	cmds := map[string]Command{
 		"run":  commandRun,
 		"dist": commandDist,
+		"watch": commandWatch,
 	}
 	flag.Parse()
 	args := flag.Args()
