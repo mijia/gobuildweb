@@ -93,10 +93,15 @@ func (app *AppShell) Run() error {
 	<- buildBinaryDone
 
 	go app.startRunner()
-	app.executeTask(
-		AppShellTask{kTaskGenAssetsMapping, ""},
-		AppShellTask{kTaskBinaryRestart, ""},
-	)
+	if app.curError != nil {
+		loggers.Error(app.curError.Error())
+		loggers.Warn("You have errors with current assets and binary, please fix that ...")
+	} else {
+		app.executeTask(
+			AppShellTask{kTaskGenAssetsMapping, ""},
+			AppShellTask{kTaskBinaryRestart, ""},
+		)
+	}
 	return nil
 }
 
