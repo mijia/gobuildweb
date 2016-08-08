@@ -88,10 +88,19 @@ func updateAssetsDeps() error {
 	}
 
 	for _, dep := range deps {
+
+		//list format : "├── babel-preset-es2015@6.6.0"
+		depName := dep;
+		if !strings.HasPrefix(dep, "git+") {
+			dep = "── " + dep
+			if !strings.Contains(dep, "@") {
+				dep += "@"
+			}
+		}
 		if strings.Contains(npmPackageNames, dep) {
 			loggers.Info("npm module %s is found", dep)
 		} else {
-			notInstalledDeps = append(notInstalledDeps, dep)
+			notInstalledDeps = append(notInstalledDeps, depName)
 		}
 	}
 
