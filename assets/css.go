@@ -21,7 +21,8 @@ func StyleSheet(config Config, entry string) _StyleSheet {
 }
 
 func (css _StyleSheet) Build(isProduction bool) error {
-	filename := fmt.Sprintf("assets/stylesheets/%s.styl", css.entry)
+	assetPath := "assets/stylesheets/"
+	filename := fmt.Sprintf(assetPath + "%s.styl", css.entry)
 	isStylus := true
 	if exist, _ := css.checkFile(filename, true); !exist {
 		filename = fmt.Sprintf("assets/stylesheets/%s.css", css.entry)
@@ -39,7 +40,7 @@ func (css _StyleSheet) Build(isProduction bool) error {
 
 	// * Maybe we need to call stylus preprocess
 	if isStylus {
-		params := []string{"--use", "nib", filename, "--out", "public/stylesheets"}
+		params := []string{"--use", "nib", "--include", assetPath, filename, "--out", target}
 		if isProduction {
 			params = append(params, "--compress")
 		} else {
@@ -75,3 +76,5 @@ func getStylusPluginPath() string {
 	_, file, _, _ := runtime.Caller(0)
 	return path.Join(path.Dir(file), "stylus-assets.js")
 }
+
+

@@ -14,6 +14,7 @@ import (
 	"github.com/mijia/gobuildweb/loggers"
 	"gopkg.in/fsnotify.v1"
 	"runtime"
+	"gopkg.in/bufio.v1"
 )
 
 type Command func(args []string) error
@@ -230,17 +231,11 @@ func (pw *ProjectWatcher) runAndWatch(dir string, appArgs []string) error {
 	if watcher, err := fsnotify.NewWatcher(); err != nil {
 		return err
 	} else {
+		pw.watcher = watcher
 		pw.app = NewAppShell(appArgs)
 		if err := pw.app.Run(); err != nil {
 			return err
 		}
-		pw.watcher = watcher
-		defer func(){
-			loggers.Info("Defer here, kill App")
-			pw.app.kill()
-			loggers.Info("Leaving gobuildweb, bye!")
-			pw.watcher.Close()
-		}()
 		if err := pw.addDirs(dir); err != nil {
 			return err
 		}
@@ -384,12 +379,24 @@ func (pw *ProjectWatcher) maybeGoCodeChanged(fname string) {
 	}
 }
 
+type DepsGetFunc func(string, string) []string
+func imageDepsGet(name string, path string) []string {
+	return []string {""}
+}
+func styleDepsGet(name string, path string) []string {
+	return []string {""}
+}
+func javascriptDepsGet(name string, path string) []string {
+	return []string {""}
+}
+
 func (pw *ProjectWatcher) maybeAssetsChanged(fname string) {
 	if !strings.HasPrefix(fname, "assets/") {
 		return
 	}
 	categories := []string{"assets/images/", "assets/stylesheets/", "assets/javascripts/"}
 	taskTypes := []TaskType{kTaskBuildImages, kTaskBuildStyles, kTaskBuildJavaScripts}
+	depsGet := []DepsGetFunc {imageDepsGet, styleDepsGet, javascriptDepsGet}
 	for i, category := range categories {
 		if strings.HasPrefix(fname, category) {
 			name := fname[len(category):]
@@ -402,7 +409,10 @@ func (pw *ProjectWatcher) maybeAssetsChanged(fname string) {
 				pw.addTask(taskTypes[i], name)
 			} else {
 				// we naively think this as a global change
-				pw.addTask(taskTypes[i], "")
+				depsList := depsGet[i](name, categories[i])
+				for _, dep := range depsList {
+					pw.addTask(taskTypes[i], dep)
+				}
 			}
 			loggers.Info(fname + " has been changed!")
 			pw.addTask(kTaskGenAssetsMapping, "")
@@ -411,6 +421,57 @@ func (pw *ProjectWatcher) maybeAssetsChanged(fname string) {
 }
 
 func (pw *ProjectWatcher) watchProject() {
+	defer func(){
+		loggers.Info("Defer here, kill App")
+		pw.app.kill()
+		loggers.Info("Leaving gobuildweb, bye!")
+		pw.watcher.Close()
+	}()
+	go func(){
+		reader := bufio.NewReader(os.Stdin)
+		for {
+			fmt.Print( "build-cmd>")
+			cmd, err := reader.ReadString('\n')
+			if(err != nil) {
+				cmd = "quit"
+			}
+			cmd = strings.TrimSpace(cmd)
+			if cmd == "b" || cmd=="bin" || cmd=="binary" {
+				fmt.Println( "start to build binary, wait for a while!\n")
+				pw.app.executeTask(
+					AppShellTask{kTaskBuildBinary, ""},
+					AppShellTask{kTaskBinaryRestart, ""},
+				)
+			} else if cmd=="s" || cmd=="style" || cmd=="styles" {
+				pw.app.executeTask(
+					AppShellTask{kTaskBuildStyles, ""},
+					AppShellTask{kTaskGenAssetsMapping, ""},
+				)
+			} else if cmd=="i" || cmd=="image" || cmd=="images" {
+				pw.app.executeTask(
+					AppShellTask{kTaskBuildImages, ""},
+					AppShellTask{kTaskGenAssetsMapping, ""},
+				)
+			} else if cmd=="j" || cmd=="js" || cmd=="javascript"{
+				pw.app.executeTask(
+					AppShellTask{kTaskBuildJavaScripts, ""},
+					AppShellTask{kTaskGenAssetsMapping, ""},
+				)
+			} else if cmd=="q" || cmd=="quit" || cmd=="exit" {
+				fmt.Println( "quit gobuildweb!\n")
+				pw.app.kill()
+				fmt.Println( "Bye!\n")
+				os.Exit(0)
+			} else {
+				fmt.Println( "b,bin,binary : rebuild binarys; \n"+
+				"s,style,styles: rebuild styles; \n"+
+				"i,image,images: rebuild images; \n"+
+				"j,js,javascript: rebuild javascript; \n"+
+				"q,quit,exit: quit gobuildweb\n" )
+			}
+
+		}
+	}()
 	tick := time.Tick(800 * time.Millisecond)
 	for {
 		select {
