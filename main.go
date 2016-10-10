@@ -20,7 +20,7 @@ type ProjectConfig struct {
 	Distribution *DistributionConfig
 }
 
-func (pc ProjectConfig) getAssetEntry(entryName string) (assets.Entry, bool) {
+func (pc ProjectConfig) getAssetEntry(entryName string) (*assets.Entry, bool) {
 	pc.RLock()
 	defer pc.RUnlock()
 	return assets.GetEntryConfig(*pc.Assets, entryName)
@@ -35,6 +35,15 @@ type PackageConfig struct {
 	BuildOpts    []string `toml:"build_opts"`
 	OmitTests    []string `toml:"omit_tests"`
 	IsGraceful   bool     `toml:"is_graceful"`
+}
+
+func (p *PackageConfig) IsEqual(pp *PackageConfig) bool {
+	return p.Name == pp.Name &&
+	p.Version == pp.Version &&
+	p.Builder == pp.Builder &&
+	p.IsGraceful == pp.IsGraceful &&
+	stringListIsEqual(p.BuildOpts, pp.BuildOpts) &&
+	stringListIsEqual(p.OmitTests, pp.OmitTests)
 }
 
 type DistributionConfig struct {

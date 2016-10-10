@@ -21,21 +21,21 @@ type Config struct {
 	AssetsMappingJson        string   `toml:"assets_mapping_json"`
 	ImageExts                []string `toml:"image_exts"`
 	Dependencies             []string `toml:"deps"`
-	VendorSets               []Entry  `toml:"vendor_set"`
-	Entries                  []Entry  `toml:"entry"`
+	VendorSets               []*Entry  `toml:"vendor_set"`
+	Entries                  []*Entry  `toml:"entry"`
 }
 
-func (config Config) getAssetEntry(entryName string) (Entry, bool) {
+func (config Config) getAssetEntry(entryName string) (*Entry, bool) {
 	return GetEntryConfig(config, entryName)
 }
 
-func GetEntryConfig(config Config, entryName string) (Entry, bool) {
+func GetEntryConfig(config Config, entryName string) (*Entry, bool) {
 	for _, entry := range append(config.VendorSets, config.Entries...) {
 		if entry.Name == entryName {
 			return entry, true
 		}
 	}
-	return Entry{}, false
+	return &Entry{}, false
 }
 
 type Entry struct {

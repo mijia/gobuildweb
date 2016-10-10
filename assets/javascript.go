@@ -44,7 +44,7 @@ func (js _JavaScript) Build(isProduction bool) error {
 	mapping := js._Asset.getJsonAssetsMapping()
 	if targetName, ok := mapping[outfile[len("public/"):]]; ok {
 		if targetName == outTarget[len("public/"):] {
-			loggers.Succ("[JavaScript][%s] Loaded assset: %s", js.entry, outTarget)
+			loggers.Succ("[JavaScript][%s] Loaded asset: %s", js.entry, outTarget)
 			return nil
 		}
 	}
@@ -96,6 +96,6 @@ func (js _JavaScript) Build(isProduction bool) error {
 	}
 
 	// target = js.addFingerPrint("public/javascripts", js.entry+".js")
-	loggers.Succ("[JavaScript][%s] Saved assset: %s", js.entry, outTarget)
+	loggers.Succ("[JavaScript][%s] Saved asset: %s", js.entry, outTarget)
 	return nil
 }
