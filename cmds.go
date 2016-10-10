@@ -14,6 +14,8 @@ import (
 	"github.com/mijia/gobuildweb/loggers"
 	"gopkg.in/fsnotify.v1"
 	"runtime"
+	"gopkg.in/bufio.v1"
+	"github.com/mijia/gobuildweb/assets"
 )
 
 type Command func(args []string) error
@@ -230,17 +232,11 @@ func (pw *ProjectWatcher) runAndWatch(dir string, appArgs []string) error {
 	if watcher, err := fsnotify.NewWatcher(); err != nil {
 		return err
 	} else {
+		pw.watcher = watcher
 		pw.app = NewAppShell(appArgs)
 		if err := pw.app.Run(); err != nil {
 			return err
 		}
-		pw.watcher = watcher
-		defer func(){
-			loggers.Info("Defer here, kill App")
-			pw.app.kill()
-			loggers.Info("Leaving gobuildweb, bye!")
-			pw.watcher.Close()
-		}()
 		if err := pw.addDirs(dir); err != nil {
 			return err
 		}
@@ -320,6 +316,78 @@ func (pw *ProjectWatcher) hasGoTests(module string) bool {
 	return err == nil && has
 }
 
+func stringListIsEqual(s1, s2 []string) bool {
+	if len(s1) != len(s2) {
+		return false
+	}
+	sMap := map[string]bool{}
+	for _, s:= range s1 {
+		sMap[strings.TrimSpace(s)] = true
+	}
+	for _, s := range s2 {
+		if _, ok := sMap[strings.TrimSpace(s)]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+
+//return diff entry name
+func assetConfigDiff(oldAssets *assets.Config, newAssets *assets.Config) (entryList []string, needBuildAll bool) {
+	if newAssets == nil {
+		return nil, false
+	}
+	if oldAssets == nil {
+		return nil, true
+	}
+	if oldAssets == nil || oldAssets.UrlPrefix != newAssets.UrlPrefix ||
+	oldAssets.AssetsMappingPkg != newAssets.AssetsMappingPkg ||
+	oldAssets.AssetsMappingPkgRelative!= newAssets.AssetsMappingPkgRelative ||
+	oldAssets.AssetsMappingJson != newAssets.AssetsMappingJson ||
+	!stringListIsEqual(oldAssets.ImageExts, newAssets.ImageExts) ||
+	!stringListIsEqual(oldAssets.Dependencies, newAssets.Dependencies){
+		return nil, true
+	}
+	diffNames := entryListDiff(oldAssets.VendorSets, newAssets.VendorSets)
+	diffNames = append(diffNames, entryListDiff(oldAssets.Entries, newAssets.Entries)...)
+	return diffNames, false
+}
+
+func entryIsEqual(e1 *assets.Entry, e2 *assets.Entry) bool {
+	if e1 == nil && e2 == nil {
+		return true
+	}
+	if e1 == nil || e2 == nil {
+		return false
+	}
+	if e1.Name != e2.Name || !stringListIsEqual(e1.Requires, e2.Requires) ||
+		!stringListIsEqual(e1.Externals, e2.Externals) ||
+		!stringListIsEqual(e1.Dependencies, e2.Dependencies) ||
+		!stringListIsEqual(e1.BundleOpts, e2.BundleOpts) {
+		return false
+	}
+	return true
+}
+func entryListDiff(oldList []*assets.Entry, newList []*assets.Entry) []string {
+	entryMap := make(map[string]*assets.Entry, len(oldList))
+	for _, e := range oldList {
+		entryMap[e.Name] = e
+	}
+
+	diffNames := []string{}
+	for _, e := range newList {
+		if oldEntry, ok := entryMap[e.Name]; ok {
+			if !entryIsEqual(e, oldEntry) {
+				diffNames = append(diffNames, e.Name)
+			}
+		} else {
+			diffNames = append(diffNames, e.Name)
+		}
+	}
+	return diffNames
+}
+
 func (pw *ProjectWatcher) updateConfig() {
 	loggers.Info("Reloading the project.toml file ...")
 	var newConfig ProjectConfig
@@ -330,26 +398,68 @@ func (pw *ProjectWatcher) updateConfig() {
 		loggers.Info("Waiting for the file changes ...")
 	} else {
 		loggers.Succ("Loaded the new project.toml, will update all the dependencies ...")
+
 		rootConfig.Lock()
+
+		needUpdateGoDeps := false
+		if rootConfig.Package != nil &&  newConfig.Package != nil {
+			needUpdateGoDeps = !stringListIsEqual(newConfig.Package.Dependencies, rootConfig.Package.Dependencies)
+		}
+
+		needUpdateAssetDeps := false
+		if rootConfig.Assets!= nil &&  newConfig.Assets!= nil {
+			needUpdateAssetDeps = !stringListIsEqual(newConfig.Assets.Dependencies, rootConfig.Assets.Dependencies)
+		}
+
+		p := rootConfig.Package
+		pp := newConfig.Package
+		needBuildBinary := !(p != nil && pp != nil && p.Name == pp.Name &&
+							p.Version == pp.Version &&
+							p.Builder == pp.Builder &&
+							p.IsGraceful == pp.IsGraceful &&
+							stringListIsEqual(p.BuildOpts, pp.BuildOpts) &&
+							stringListIsEqual(p.OmitTests, pp.OmitTests))
+		diffEntryNames, needBuildAllAssets := assetConfigDiff(rootConfig.Assets, newConfig.Assets)
+
 		rootConfig.Package = newConfig.Package
 		rootConfig.Assets = newConfig.Assets
 		rootConfig.Distribution = newConfig.Distribution
 		rootConfig.Unlock()
-		if err := updateGolangDeps(); err != nil {
-			loggers.Error("Failed to load project Go dependencies, %v", err)
-			return
+
+		if needUpdateGoDeps {
+			if err := updateGolangDeps(); err != nil {
+				loggers.Error("Failed to load project Go dependencies, %v", err)
+				return
+			}
 		}
-		if err := updateAssetsDeps(); err != nil {
-			loggers.Error("Failed to load project assets dependencies, %v", err)
-			return
+
+		if needUpdateAssetDeps {
+			if err := updateAssetsDeps(); err != nil {
+				loggers.Error("Failed to load project assets dependencies, %v", err)
+				return
+			}
 		}
-		pw.addTask(kTaskBuildImages, "")
-		pw.addTask(kTaskBuildStyles, "")
-		pw.addTask(kTaskBuildJavaScripts, "")
-		pw.addTask(kTaskGenAssetsMapping, "")
-		pw.addTask(kTaskBuildBinary, "")
-		pw.addTask(kTaskBinaryRestart, "")
+		if needBuildAllAssets {
+			pw.addTask(kTaskBuildImages, "")
+			pw.addTask(kTaskGenAssetsMapping, "")
+			pw.addTask(kTaskBuildStyles, "")
+			pw.addTask(kTaskBuildJavaScripts, "")
+			pw.addTask(kTaskGenAssetsMapping, "")
+		} else {
+			for _, name := range diffEntryNames {
+				pw.addTask(kTaskBuildImages, name)
+				pw.addTask(kTaskGenAssetsMapping, "")
+				pw.addTask(kTaskBuildStyles, name)
+				pw.addTask(kTaskBuildJavaScripts, name)
+				pw.addTask(kTaskGenAssetsMapping, "")
+			}
+		}
+		if needBuildBinary{
+			pw.addTask(kTaskBuildBinary, "")
+			pw.addTask(kTaskBinaryRestart, "")
+		}
 	}
+	loggers.Info("Reloading the project.toml file Finished!")
 }
 
 func (pw *ProjectWatcher) goModuleName(dir string) (string, error) {
@@ -384,12 +494,24 @@ func (pw *ProjectWatcher) maybeGoCodeChanged(fname string) {
 	}
 }
 
+type DepsGetFunc func(string, string) []string
+func imageDepsGet(name string, path string) []string {
+	return []string {""}
+}
+func styleDepsGet(name string, path string) []string {
+	return []string {""}
+}
+func javascriptDepsGet(name string, path string) []string {
+	return []string {""}
+}
+
 func (pw *ProjectWatcher) maybeAssetsChanged(fname string) {
 	if !strings.HasPrefix(fname, "assets/") {
 		return
 	}
 	categories := []string{"assets/images/", "assets/stylesheets/", "assets/javascripts/"}
 	taskTypes := []TaskType{kTaskBuildImages, kTaskBuildStyles, kTaskBuildJavaScripts}
+	depsGet := []DepsGetFunc {imageDepsGet, styleDepsGet, javascriptDepsGet}
 	for i, category := range categories {
 		if strings.HasPrefix(fname, category) {
 			name := fname[len(category):]
@@ -402,7 +524,10 @@ func (pw *ProjectWatcher) maybeAssetsChanged(fname string) {
 				pw.addTask(taskTypes[i], name)
 			} else {
 				// we naively think this as a global change
-				pw.addTask(taskTypes[i], "")
+				depsList := depsGet[i](name, categories[i])
+				for _, dep := range depsList {
+					pw.addTask(taskTypes[i], dep)
+				}
 			}
 			loggers.Info(fname + " has been changed!")
 			pw.addTask(kTaskGenAssetsMapping, "")
@@ -411,6 +536,84 @@ func (pw *ProjectWatcher) maybeAssetsChanged(fname string) {
 }
 
 func (pw *ProjectWatcher) watchProject() {
+	/*
+	defer func(){
+		loggers.Info("Defer here, kill App")
+		pw.app.kill()
+		loggers.Info("Leaving gobuildweb, bye!")
+		pw.watcher.Close()
+		os.Exit(0)
+	}()
+	*/
+	go func(){
+		reader := bufio.NewReader(os.Stdin)
+		for {
+			fmt.Print( "build-cmd>")
+			str, err := reader.ReadString('\n')
+			cmd := ""
+			args := []string{}
+			if(err == nil) {
+				strList := strings.Split(strings.TrimSpace(str), " ")
+				if len(strList) > 0 {
+					cmd = strings.TrimSpace(strList[0])
+				}
+				args = strList[1:]
+			} else {
+				cmd = "quit"
+			}
+			if cmd == "b" || cmd=="bin" || cmd=="binary" {
+				fmt.Println( "start to build binary, wait for a while!\n")
+				pw.app.executeTask(
+					AppShellTask{kTaskBuildBinary, ""},
+					AppShellTask{kTaskBinaryRestart, ""},
+				)
+			} else if cmd=="s" || cmd=="style" || cmd=="styles" {
+				if len(args)>0 {
+					for _, arg := range args {
+						pw.app.executeTask(
+							AppShellTask{kTaskBuildStyles, arg},
+						)
+					}
+				} else {
+					pw.app.executeTask(AppShellTask{kTaskBuildStyles, ""})
+				}
+				pw.app.executeTask(AppShellTask{kTaskGenAssetsMapping, ""})
+			} else if cmd=="i" || cmd=="image" || cmd=="images" {
+				if len(args)>0 {
+					for _, arg := range args {
+						pw.app.executeTask(
+							AppShellTask{kTaskBuildImages, arg},
+						)
+					}
+				} else {
+					pw.app.executeTask(AppShellTask{kTaskBuildImages, ""})
+				}
+				pw.app.executeTask(AppShellTask{kTaskGenAssetsMapping, ""})
+			} else if cmd=="j" || cmd=="js" || cmd=="javascript"{
+				if len(args)>0 {
+					for _, arg := range args {
+						pw.app.executeTask(
+							AppShellTask{kTaskBuildJavaScripts, arg},
+						)
+					}
+				} else {
+					pw.app.executeTask(AppShellTask{kTaskBuildJavaScripts, ""})
+				}
+				pw.app.executeTask(AppShellTask{kTaskGenAssetsMapping, ""})
+			} else if cmd=="q" || cmd=="quit" || cmd=="exit" {
+				fmt.Println( "quit gobuildweb!\n")
+				pw.app.kill()
+				fmt.Println( "Bye!\n")
+				os.Exit(0)
+			} else {
+				fmt.Println( "b,bin,binary : rebuild binarys; \n"+
+				"s,style,styles [entry1 entry2 ...]: rebuild styles; \n"+
+				"i,image,images [entry1 entry2 ...]: rebuild images; \n"+
+				"j,js,javascript [entry1 entry2 ...] : rebuild javascript; \n"+
+				"q,quit,exit: quit gobuildweb\n" )
+			}
+		}
+	}()
 	tick := time.Tick(800 * time.Millisecond)
 	for {
 		select {
@@ -451,8 +654,13 @@ func (pw *ProjectWatcher) watchProject() {
 						// else we take it as a go code directory
 						// TODO
 					} else {
+						/*
 						if event.Name == "project.toml" {
 							panic("Please don't hurt the project.toml")
+						}
+						*/
+						if fi.Name() == "project.toml" {
+							//pw.updateConfig()
 						}
 						// maybe remove some source code
 						// TODO

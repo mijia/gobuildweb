@@ -25,11 +25,12 @@ function plugin(){
     return function(style){
         style.define('assets', assets);
         style.define('images', images);
+        style.define('url', url);
     }
 }
 
 /**
- * get the real file name from the json file
+ * get the real file name from thce json file
  *
  * @example
  *      assets("images/a/b.jpg") => url("../images/a/fpXXX-b.jpg")
@@ -49,6 +50,31 @@ function assets(file){
 }
 
 /**
+ * get the real file name from the json file
+ *
+ * @example
+ *      url("{{ assets 'images/a/b.jpg' }}") => url("../images/a/fpXXX-b.jpg")
+ *
+ * @param file  the original file path in assets directory
+ * @returns {stylus.nodes.liter}
+ */
+function url(file){
+    var filename=file.val;
+    var re =/\s*\{\{\s*assets\s*(['"]?)\s*([^\s]*)\s*\1\s*\}\}\s*/g;
+    if(re.test(filename)) {
+        filename=filename.replace(re, "$2");
+        var path = list[filename];
+        if(path){
+            liter = path;
+        }else{
+            liter = filename;
+        }
+        return  new nodes.Literal('url("../'+ liter +'")')
+    }
+    return  new nodes.Literal('url("'+file.val+'")')
+}
+
+/**
  * short for assets call start with "images/"
  *
  * @example
@@ -61,6 +87,7 @@ function assets(file){
  * @param 文件夹`images`后边的文件名
  * @returns {stylus.nodes.liter}
  */
+
 function images(file){
     //console.log(path.join('images/', file.val));
     
