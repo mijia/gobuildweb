@@ -262,6 +262,7 @@ func (app *AppShell) startRunner() {
 		case kTaskBuildBinary:
 			app.curError = app.buildBinary()
 		case kTaskBinaryRestart:
+			loggers.Info("Binary Restart!")
 			if app.curError == nil {
 				if err := app.kill(); err != nil {
 					loggers.Error("App cannot be killed, maybe you should restart the gobuildweb: %v", err)

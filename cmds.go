@@ -70,6 +70,14 @@ func updateAssetsDeps() error {
 		return nil
 	}
 
+	nodeModulesDir := "./node_modules"
+	if _, err := os.Stat(nodeModulesDir); err != nil {
+		err = os.Mkdir(nodeModulesDir, 0755)
+		if err != nil {
+			loggers.Error("Cannot create "+nodeModulesDir+": %v", err)
+			return err
+		}
+	}
 	fmt.Println()
 	loggers.Info("Start to loading assets dependencies...")
 	checkParams := []string{"list", "--depth", "0"}
@@ -83,8 +91,7 @@ func updateAssetsDeps() error {
 	npmPackageNames := ""
 	if outputs, err := listCmd.CombinedOutput(); err != nil {
 		// the module has been installed
-		loggers.Error("npm check error: %v", err)
-		return err
+		loggers.Warn("npm check error: %v", err)
 	} else {
 		npmPackageNames = string(outputs)
 	}
@@ -114,8 +121,8 @@ func updateAssetsDeps() error {
 		installCmd.Stderr = os.Stderr
 		installCmd.Env = mergeEnv(nil)
 		if err := installCmd.Run(); err != nil {
-			loggers.Error("Error when run npm install: npm %v, %v", params, err)
-			return err
+			loggers.Warn("Error when run npm install: npm %v, %v", params, err)
+			//return err
 		}
 	}
 	loggers.Succ("Loaded assets dependencies: \n\t%v", strings.Join(deps, "\n\t"))
@@ -303,7 +310,7 @@ func (pw *ProjectWatcher) hasGoTests(module string) bool {
 	rootConfig.RUnlock()
 	err := filepath.Walk(module, func(fname string, info os.FileInfo, err error) error {
 		if _, ok := ignoreTests[fname]; !ok {
-			if !info.IsDir() {
+			if info != nil && !info.IsDir() {
 				if strings.HasSuffix(fname, "_test.go") {
 					has = true
 				}
