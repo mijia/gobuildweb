@@ -7,15 +7,35 @@
 
 var stylus = require('stylus'),
     path   = require('path'),
+    fs     = require('fs'),
+    crypto = require('crypto'),
     nodes = stylus.nodes;
 
 
 // `process.cwd()` is the project root path here
 
-var jsonFile = path.join(process.cwd(), './assets_map.json');
-var list = require(jsonFile);
+//var jsonFile = path.join(process.cwd(), './assets_map.json');
+//var list = require(jsonFile);
 
+function md5(filepath, algorithm, encoding, fileEncoding) {
+    var hash = crypto.createHash(algorithm);
+    hash.update(fs.readFileSync(filepath), fileEncoding);
+    return hash.digest(encoding);
+}
 
+function getFileHashName(filename){
+    var filepath  = path.join(process.cwd(), 'assets', filename);
+    var name      = path.basename(filename);
+    var fileStats = fs.statSync(filepath);
+
+    if(fileStats.isFile()){
+        var hash = md5(filepath, 'md5', 'hex', 'utf8');
+        var result =path.join(path.dirname(filename), 'fp'+ hash + '-' + name);
+        return result;
+    }else {
+        return filename;
+    }
+}
 
 /**
  * add custom functions
@@ -40,12 +60,9 @@ function plugin(){
  */
 function assets(file){
     var liter;
-    var path = list[file.val]
-    if(path){
-        liter = path;
-    }else{
-        liter = file.val;
-    }
+    var filepath = file.val;
+    filepath = filepath.replace(/^\.\.\//, '');
+    liter = getFileHashName(filepath);
     return  new nodes.Literal('url("../'+ liter +'")')
 }
 
