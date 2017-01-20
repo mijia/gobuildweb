@@ -81,8 +81,7 @@ func (d _GoPkgMappingDumper) GetPkgPath() (pkgName, targetPath string) {
 		pkgName = "main"
 		targetPath = "assets_gen.go"
 	} else {
-		goPath := os.Getenv("GOPATH")
-		targetPath = path.Join(goPath, "src", pkgName, "assets_gen.go")
+		targetPath = "./web/assets_gen.go"
 		pkgName = path.Base(pkgName)
 	}
 	return
