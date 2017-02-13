@@ -554,13 +554,19 @@ func (pw *ProjectWatcher) watchProject() {
 	*/
 	go func(){
 		reader := bufio.NewReader(os.Stdin)
+		lastCmdStr := ""
 		for {
 			fmt.Print( "build-cmd>")
 			str, err := reader.ReadString('\n')
+			str = strings.TrimSpace(str)
 			cmd := ""
 			args := []string{}
 			if(err == nil) {
-				strList := strings.Split(strings.TrimSpace(str), " ")
+				if str == "l" || str == "last" {
+					fmt.Println("execute last command: ", lastCmdStr)
+					str = lastCmdStr
+				}
+				strList := strings.Split(str, " ")
 				if len(strList) > 0 {
 					cmd = strings.TrimSpace(strList[0])
 				}
@@ -574,6 +580,7 @@ func (pw *ProjectWatcher) watchProject() {
 					AppShellTask{kTaskBuildBinary, ""},
 					AppShellTask{kTaskBinaryRestart, ""},
 				)
+				lastCmdStr = str
 			} else if cmd=="s" || cmd=="style" || cmd=="styles" {
 				if len(args)>0 {
 					for _, arg := range args {
@@ -585,6 +592,7 @@ func (pw *ProjectWatcher) watchProject() {
 					pw.app.executeTask(AppShellTask{kTaskBuildStyles, ""})
 				}
 				pw.app.executeTask(AppShellTask{kTaskGenAssetsMapping, ""})
+				lastCmdStr = str
 			} else if cmd=="i" || cmd=="image" || cmd=="images" {
 				if len(args)>0 {
 					for _, arg := range args {
@@ -596,6 +604,7 @@ func (pw *ProjectWatcher) watchProject() {
 					pw.app.executeTask(AppShellTask{kTaskBuildImages, ""})
 				}
 				pw.app.executeTask(AppShellTask{kTaskGenAssetsMapping, ""})
+				lastCmdStr = str
 			} else if cmd=="j" || cmd=="js" || cmd=="javascript"{
 				if len(args)>0 {
 					for _, arg := range args {
@@ -607,6 +616,40 @@ func (pw *ProjectWatcher) watchProject() {
 					pw.app.executeTask(AppShellTask{kTaskBuildJavaScripts, ""})
 				}
 				pw.app.executeTask(AppShellTask{kTaskGenAssetsMapping, ""})
+				lastCmdStr = str
+			} else if cmd=="a" || cmd=="asset" || cmd=="assets" {
+				if len(args)>0 {
+					for _, arg := range args {
+						pw.app.executeTask(
+							AppShellTask{kTaskBuildImages, arg},
+						)
+					}
+				} else {
+					pw.app.executeTask(AppShellTask{kTaskBuildImages, ""})
+				}
+
+				pw.app.executeTask(AppShellTask{kTaskGenAssetsMapping, ""})
+				if len(args)>0 {
+					for _, arg := range args {
+						pw.app.executeTask(
+							AppShellTask{kTaskBuildStyles, arg},
+						)
+					}
+				} else {
+					pw.app.executeTask(AppShellTask{kTaskBuildStyles, ""})
+				}
+				pw.app.executeTask(AppShellTask{kTaskGenAssetsMapping, ""})
+				if len(args)>0 {
+					for _, arg := range args {
+						pw.app.executeTask(
+							AppShellTask{kTaskBuildJavaScripts, arg},
+						)
+					}
+				} else {
+					pw.app.executeTask(AppShellTask{kTaskBuildJavaScripts, ""})
+				}
+				pw.app.executeTask(AppShellTask{kTaskGenAssetsMapping, ""})
+				lastCmdStr = str
 			} else if cmd=="q" || cmd=="quit" || cmd=="exit" {
 				fmt.Println( "quit gobuildweb!\n")
 				pw.app.kill()
@@ -617,6 +660,8 @@ func (pw *ProjectWatcher) watchProject() {
 				"s,style,styles [entry1 entry2 ...]: rebuild styles; \n"+
 				"i,image,images [entry1 entry2 ...]: rebuild images; \n"+
 				"j,js,javascript [entry1 entry2 ...] : rebuild javascript; \n"+
+				"a,asset,assets [entry1 entry2 ...] : rebuild module assets; \n"+
+				"l,last : execute last command\n"+
 				"q,quit,exit: quit gobuildweb\n" )
 			}
 		}
