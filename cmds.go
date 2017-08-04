@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/mijia/gobuildweb/assets"
 	"github.com/mijia/gobuildweb/loggers"
+	"gopkg.in/bufio.v1"
 	"gopkg.in/fsnotify.v1"
 	"runtime"
-	"gopkg.in/bufio.v1"
-	"github.com/mijia/gobuildweb/assets"
 )
 
 type Command func(args []string) error
@@ -66,7 +66,11 @@ func updateAssetsDeps() error {
 	rootConfig.RLock()
 	defer rootConfig.RUnlock()
 
-	if rootConfig.Assets == nil || len(rootConfig.Assets.Dependencies) == 0 {
+	//if rootConfig.Assets == nil || len(rootConfig.Assets.Dependencies) == 0 {
+	//	return nil
+	//}
+
+	if rootConfig.Assets == nil {
 		return nil
 	}
 
@@ -79,55 +83,62 @@ func updateAssetsDeps() error {
 		}
 	}
 	fmt.Println()
-	loggers.Info("Start to loading assets dependencies...")
-	checkParams := []string{"list", "--depth", "0"}
-	params := []string{"install", ""}
-	deps := make([]string, len(rootConfig.Assets.Dependencies), len(rootConfig.Assets.Dependencies)+1)
-	copy(deps, rootConfig.Assets.Dependencies)
-	deps = append(deps, "browserify", "coffeeify", "envify", "uglifyify", "babelify", "babel-preset-es2015", "babel-preset-react", "nib", "stylus")
-	notInstalledDeps := make([]string, 0)
-	listCmd := exec.Command("npm", checkParams...)
-	listCmd.Env = mergeEnv(nil)
-	npmPackageNames := ""
-	if outputs, err := listCmd.CombinedOutput(); err != nil {
-		// the module has been installed
-		loggers.Warn("npm check error: %v", err)
-	} else {
-		npmPackageNames = string(outputs)
+	//loggers.Info("Start to loading assets dependencies...")
+	loggers.Info("npm install ...")
+	npmInstallCmd := exec.Command("npm", "install")
+	if err := npmInstallCmd.Run(); err != nil {
+		loggers.Warn("Error when run npm install: %v", err)
 	}
 
-	for _, dep := range deps {
-
-		//list format : "├── babel-preset-es2015@6.6.0"
-		depName := dep;
-		if !strings.HasPrefix(dep, "git+") {
-			dep = "── " + dep
-			if !strings.Contains(dep, "@") {
-				dep += "@"
-			}
-		}
-		if strings.Contains(npmPackageNames, dep) {
-			loggers.Info("npm module %s is found", dep)
-		} else {
-			notInstalledDeps = append(notInstalledDeps, depName)
-		}
-	}
-
-	for _, dep := range notInstalledDeps {
-		params[len(params)-1] = dep
-		loggers.Info("Loading npm module: %v", dep)
-		installCmd := exec.Command("npm", params...)
-		installCmd.Stdout = os.Stdout
-		installCmd.Stderr = os.Stderr
-		installCmd.Env = mergeEnv(nil)
-		if err := installCmd.Run(); err != nil {
-			loggers.Warn("Error when run npm install: npm %v, %v", params, err)
-			//return err
-		}
-	}
-	loggers.Succ("Loaded assets dependencies: \n\t%v", strings.Join(deps, "\n\t"))
+	//checkParams := []string{"list", "--depth", "0"}
+	//params := []string{"install", ""}
+	//deps := make([]string, len(rootConfig.Assets.Dependencies), len(rootConfig.Assets.Dependencies)+1)
+	//copy(deps, rootConfig.Assets.Dependencies)
+	//deps = append(deps, "browserify", "coffeeify", "envify", "uglifyify", "babelify", "babel-preset-es2015", "babel-preset-react", "nib", "stylus")
+	//notInstalledDeps := make([]string, 0)
+	//listCmd := exec.Command("npm", checkParams...)
+	//listCmd.Env = mergeEnv(nil)
+	//npmPackageNames := ""
+	//if outputs, err := listCmd.CombinedOutput(); err != nil {
+	//	// the module has been installed
+	//	loggers.Warn("npm check error: %v", err)
+	//} else {
+	//	npmPackageNames = string(outputs)
+	//}
+	//
+	//for _, dep := range deps {
+	//
+	//	//list format : "├── babel-preset-es2015@6.6.0"
+	//	depName := dep;
+	//	if !strings.HasPrefix(dep, "git+") {
+	//		dep = "── " + dep
+	//		if !strings.Contains(dep, "@") {
+	//			dep += "@"
+	//		}
+	//	}
+	//	if strings.Contains(npmPackageNames, dep) {
+	//		loggers.Info("npm module %s is found", dep)
+	//	} else {
+	//		notInstalledDeps = append(notInstalledDeps, depName)
+	//	}
+	//}
+	//
+	//for _, dep := range notInstalledDeps {
+	//	params[len(params)-1] = dep
+	//	loggers.Info("Loading npm module: %v", dep)
+	//	installCmd := exec.Command("npm", params...)
+	//	installCmd.Stdout = os.Stdout
+	//	installCmd.Stderr = os.Stderr
+	//	installCmd.Env = mergeEnv(nil)
+	//	if err := installCmd.Run(); err != nil {
+	//		loggers.Warn("Error when run npm install: npm %v, %v", params, err)
+	//		//return err
+	//	}
+	//}
+	//loggers.Succ("Loaded assets dependencies: \n\t%v", strings.Join(deps, "\n\t"))
 	return nil
 }
+
 //是否已经下载了go运行所需要的包,是否可以编译成功
 func hasGetColangDeps() bool {
 	cmd := exec.Command("go", "build")
@@ -221,7 +232,7 @@ func (pw *ProjectWatcher) WatchOnly(dir string, appArgs []string) error {
 			)
 		}
 		pw.watcher = watcher
-		defer func(){
+		defer func() {
 			pw.watcher.Close()
 		}()
 		if err := pw.addDirs(dir); err != nil {
@@ -328,7 +339,7 @@ func stringListIsEqual(s1, s2 []string) bool {
 		return false
 	}
 	sMap := map[string]bool{}
-	for _, s:= range s1 {
+	for _, s := range s1 {
 		sMap[strings.TrimSpace(s)] = true
 	}
 	for _, s := range s2 {
@@ -339,7 +350,6 @@ func stringListIsEqual(s1, s2 []string) bool {
 	return true
 }
 
-
 //return diff entry name
 func assetConfigDiff(oldAssets *assets.Config, newAssets *assets.Config) (entryList []string, needBuildAll bool) {
 	if newAssets == nil {
@@ -349,11 +359,11 @@ func assetConfigDiff(oldAssets *assets.Config, newAssets *assets.Config) (entryL
 		return nil, true
 	}
 	if oldAssets == nil || oldAssets.UrlPrefix != newAssets.UrlPrefix ||
-	oldAssets.AssetsMappingPkg != newAssets.AssetsMappingPkg ||
-	oldAssets.AssetsMappingPkgRelative!= newAssets.AssetsMappingPkgRelative ||
-	oldAssets.AssetsMappingJson != newAssets.AssetsMappingJson ||
-	!stringListIsEqual(oldAssets.ImageExts, newAssets.ImageExts) ||
-	!stringListIsEqual(oldAssets.Dependencies, newAssets.Dependencies){
+		oldAssets.AssetsMappingPkg != newAssets.AssetsMappingPkg ||
+		oldAssets.AssetsMappingPkgRelative != newAssets.AssetsMappingPkgRelative ||
+		oldAssets.AssetsMappingJson != newAssets.AssetsMappingJson ||
+		!stringListIsEqual(oldAssets.ImageExts, newAssets.ImageExts) ||
+		!stringListIsEqual(oldAssets.Dependencies, newAssets.Dependencies) {
 		return nil, true
 	}
 	diffNames := entryListDiff(oldAssets.VendorSets, newAssets.VendorSets)
@@ -409,23 +419,23 @@ func (pw *ProjectWatcher) updateConfig() {
 		rootConfig.Lock()
 
 		needUpdateGoDeps := false
-		if rootConfig.Package != nil &&  newConfig.Package != nil {
+		if rootConfig.Package != nil && newConfig.Package != nil {
 			needUpdateGoDeps = !stringListIsEqual(newConfig.Package.Dependencies, rootConfig.Package.Dependencies)
 		}
 
 		needUpdateAssetDeps := false
-		if rootConfig.Assets!= nil &&  newConfig.Assets!= nil {
+		if rootConfig.Assets != nil && newConfig.Assets != nil {
 			needUpdateAssetDeps = !stringListIsEqual(newConfig.Assets.Dependencies, rootConfig.Assets.Dependencies)
 		}
 
 		p := rootConfig.Package
 		pp := newConfig.Package
 		needBuildBinary := !(p != nil && pp != nil && p.Name == pp.Name &&
-							p.Version == pp.Version &&
-							p.Builder == pp.Builder &&
-							p.IsGraceful == pp.IsGraceful &&
-							stringListIsEqual(p.BuildOpts, pp.BuildOpts) &&
-							stringListIsEqual(p.OmitTests, pp.OmitTests))
+			p.Version == pp.Version &&
+			p.Builder == pp.Builder &&
+			p.IsGraceful == pp.IsGraceful &&
+			stringListIsEqual(p.BuildOpts, pp.BuildOpts) &&
+			stringListIsEqual(p.OmitTests, pp.OmitTests))
 		diffEntryNames, needBuildAllAssets := assetConfigDiff(rootConfig.Assets, newConfig.Assets)
 
 		rootConfig.Package = newConfig.Package
@@ -461,7 +471,7 @@ func (pw *ProjectWatcher) updateConfig() {
 				pw.addTask(kTaskGenAssetsMapping, "")
 			}
 		}
-		if needBuildBinary{
+		if needBuildBinary {
 			pw.addTask(kTaskBuildBinary, "")
 			pw.addTask(kTaskBinaryRestart, "")
 		}
@@ -502,14 +512,15 @@ func (pw *ProjectWatcher) maybeGoCodeChanged(fname string) {
 }
 
 type DepsGetFunc func(string, string) []string
+
 func imageDepsGet(name string, path string) []string {
-	return []string {""}
+	return []string{""}
 }
 func styleDepsGet(name string, path string) []string {
-	return []string {""}
+	return []string{""}
 }
 func javascriptDepsGet(name string, path string) []string {
-	return []string {""}
+	return []string{""}
 }
 
 func (pw *ProjectWatcher) maybeAssetsChanged(fname string) {
@@ -518,7 +529,7 @@ func (pw *ProjectWatcher) maybeAssetsChanged(fname string) {
 	}
 	categories := []string{"assets/images/", "assets/stylesheets/", "assets/javascripts/"}
 	taskTypes := []TaskType{kTaskBuildImages, kTaskBuildStyles, kTaskBuildJavaScripts}
-	depsGet := []DepsGetFunc {imageDepsGet, styleDepsGet, javascriptDepsGet}
+	depsGet := []DepsGetFunc{imageDepsGet, styleDepsGet, javascriptDepsGet}
 	for i, category := range categories {
 		if strings.HasPrefix(fname, category) {
 			name := fname[len(category):]
@@ -544,22 +555,22 @@ func (pw *ProjectWatcher) maybeAssetsChanged(fname string) {
 
 func (pw *ProjectWatcher) watchProject() {
 	/*
-	defer func(){
-		loggers.Info("Defer here, kill App")
-		pw.app.kill()
-		loggers.Info("Leaving gobuildweb, bye!")
-		pw.watcher.Close()
-		os.Exit(0)
-	}()
+		defer func(){
+			loggers.Info("Defer here, kill App")
+			pw.app.kill()
+			loggers.Info("Leaving gobuildweb, bye!")
+			pw.watcher.Close()
+			os.Exit(0)
+		}()
 	*/
-	go func(){
+	go func() {
 		reader := bufio.NewReader(os.Stdin)
 		for {
-			fmt.Print( "build-cmd>")
+			fmt.Print("build-cmd>")
 			str, err := reader.ReadString('\n')
 			cmd := ""
 			args := []string{}
-			if(err == nil) {
+			if err == nil {
 				strList := strings.Split(strings.TrimSpace(str), " ")
 				if len(strList) > 0 {
 					cmd = strings.TrimSpace(strList[0])
@@ -568,14 +579,14 @@ func (pw *ProjectWatcher) watchProject() {
 			} else {
 				cmd = "quit"
 			}
-			if cmd == "b" || cmd=="bin" || cmd=="binary" {
-				fmt.Println( "start to build binary, wait for a while!\n")
+			if cmd == "b" || cmd == "bin" || cmd == "binary" {
+				fmt.Println("start to build binary, wait for a while!\n")
 				pw.app.executeTask(
 					AppShellTask{kTaskBuildBinary, ""},
 					AppShellTask{kTaskBinaryRestart, ""},
 				)
-			} else if cmd=="s" || cmd=="style" || cmd=="styles" {
-				if len(args)>0 {
+			} else if cmd == "s" || cmd == "style" || cmd == "styles" {
+				if len(args) > 0 {
 					for _, arg := range args {
 						pw.app.executeTask(
 							AppShellTask{kTaskBuildStyles, arg},
@@ -585,8 +596,8 @@ func (pw *ProjectWatcher) watchProject() {
 					pw.app.executeTask(AppShellTask{kTaskBuildStyles, ""})
 				}
 				pw.app.executeTask(AppShellTask{kTaskGenAssetsMapping, ""})
-			} else if cmd=="i" || cmd=="image" || cmd=="images" {
-				if len(args)>0 {
+			} else if cmd == "i" || cmd == "image" || cmd == "images" {
+				if len(args) > 0 {
 					for _, arg := range args {
 						pw.app.executeTask(
 							AppShellTask{kTaskBuildImages, arg},
@@ -596,8 +607,8 @@ func (pw *ProjectWatcher) watchProject() {
 					pw.app.executeTask(AppShellTask{kTaskBuildImages, ""})
 				}
 				pw.app.executeTask(AppShellTask{kTaskGenAssetsMapping, ""})
-			} else if cmd=="j" || cmd=="js" || cmd=="javascript"{
-				if len(args)>0 {
+			} else if cmd == "j" || cmd == "js" || cmd == "javascript" {
+				if len(args) > 0 {
 					for _, arg := range args {
 						pw.app.executeTask(
 							AppShellTask{kTaskBuildJavaScripts, arg},
@@ -607,17 +618,17 @@ func (pw *ProjectWatcher) watchProject() {
 					pw.app.executeTask(AppShellTask{kTaskBuildJavaScripts, ""})
 				}
 				pw.app.executeTask(AppShellTask{kTaskGenAssetsMapping, ""})
-			} else if cmd=="q" || cmd=="quit" || cmd=="exit" {
-				fmt.Println( "quit gobuildweb!\n")
+			} else if cmd == "q" || cmd == "quit" || cmd == "exit" {
+				fmt.Println("quit gobuildweb!\n")
 				pw.app.kill()
-				fmt.Println( "Bye!\n")
+				fmt.Println("Bye!\n")
 				os.Exit(0)
 			} else {
-				fmt.Println( "b,bin,binary : rebuild binarys; \n"+
-				"s,style,styles [entry1 entry2 ...]: rebuild styles; \n"+
-				"i,image,images [entry1 entry2 ...]: rebuild images; \n"+
-				"j,js,javascript [entry1 entry2 ...] : rebuild javascript; \n"+
-				"q,quit,exit: quit gobuildweb\n" )
+				fmt.Println("b,bin,binary : rebuild binarys; \n" +
+					"s,style,styles [entry1 entry2 ...]: rebuild styles; \n" +
+					"i,image,images [entry1 entry2 ...]: rebuild images; \n" +
+					"j,js,javascript [entry1 entry2 ...] : rebuild javascript; \n" +
+					"q,quit,exit: quit gobuildweb\n")
 			}
 		}
 	}()
@@ -662,9 +673,9 @@ func (pw *ProjectWatcher) watchProject() {
 						// TODO
 					} else {
 						/*
-						if event.Name == "project.toml" {
-							panic("Please don't hurt the project.toml")
-						}
+							if event.Name == "project.toml" {
+								panic("Please don't hurt the project.toml")
+							}
 						*/
 						if fi.Name() == "project.toml" {
 							//pw.updateConfig()
